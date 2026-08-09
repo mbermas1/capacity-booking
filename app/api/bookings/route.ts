@@ -7,6 +7,7 @@ export async function GET(request: NextRequest) {
   const searchParams = request.nextUrl.searchParams;
   const dockId = searchParams.get("dockId");
   const carrierName = searchParams.get("carrierName");
+  const referenceNumber = searchParams.get("referenceNumber");
 
   const errors: string[] = [];
 
@@ -16,6 +17,10 @@ export async function GET(request: NextRequest) {
 
   if (carrierName !== null && !isNonEmptyString(carrierName)) {
     errors.push("carrierName query parameter must not be empty");
+  }
+
+  if (referenceNumber !== null && !isNonEmptyString(referenceNumber)) {
+    errors.push("referenceNumber query parameter must not be empty");
   }
 
   if (errors.length > 0) {
@@ -33,6 +38,7 @@ export async function GET(request: NextRequest) {
     where: {
       ...(dockId !== null ? { dockId } : {}),
       ...(carrierName !== null ? { carrierName: { contains: carrierName } } : {}),
+      ...(referenceNumber !== null ? { referenceNumber: { contains: referenceNumber } } : {}),
     },
     orderBy: { startTime: "asc" },
   });
