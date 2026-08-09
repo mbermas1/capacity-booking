@@ -1,6 +1,30 @@
 import { NextRequest, NextResponse } from "next/server";
 import { BookingOverlapError, createBooking } from "@/lib/bookings";
+import { prisma } from "@/lib/prisma";
 import { BookingStatus, LoadType, Prisma } from "@/app/generated/prisma/client";
+
+export async function GET(request: NextRequest) {
+  const dockId = request.nextUrl.searchParams.get("dockId");
+
+  if (!isNonEmptyString(dockId)) {
+    return NextResponse.json(
+      { error: "Validation failed", details: ["dockId query parameter is required"] },
+      { status: 400 },
+    );
+  }
+
+  const dock = await prisma.dock.findUnique({ where: { id: dockId } });
+  if (!dock) {
+    return NextResponse.json({ error: "Dock not found" }, { status: 404 });
+  }
+
+  const bookings = await prisma.booking.findMany({
+    where: { dockId },
+    orderBy: { startTime: "asc" },
+  });
+
+  return NextResponse.json(bookings);
+}
 
 type CreateBookingBody = {
   dockId?: unknown;
