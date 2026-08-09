@@ -12,6 +12,20 @@ function isNonEmptyString(value: unknown): value is string {
   return typeof value === "string" && value.trim().length > 0;
 }
 
+export async function GET(
+  request: NextRequest,
+  { params }: { params: Promise<{ id: string }> },
+) {
+  const { id } = await params;
+
+  const dock = await prisma.dock.findUnique({ where: { id } });
+  if (!dock) {
+    return NextResponse.json({ error: "Dock not found" }, { status: 404 });
+  }
+
+  return NextResponse.json(dock);
+}
+
 export async function PATCH(
   request: NextRequest,
   { params }: { params: Promise<{ id: string }> },
