@@ -1,7 +1,7 @@
 import { cookies } from "next/headers";
 import { redirect } from "next/navigation";
 import { prisma } from "@/lib/prisma";
-import { verifySessionToken } from "@/lib/portal-auth";
+import { createSessionToken, verifyPassword, verifySessionToken, SESSION_TTL_SECONDS } from "@/lib/portal-auth";
 
 export const PORTAL_SESSION_COOKIE = "portal_session";
 
@@ -20,4 +20,24 @@ export async function requirePortalSession() {
   const session = await getPortalSession();
   if (!session) redirect("/portal/login");
   return session;
+}
+
+export async function authenticateCarrier(email: string, password: string) {
+  const carrier = await prisma.carrier.findUnique({ where: { email } });
+  if (!carrier || !carrier.passwordHash || !verifyPassword(password, carrier.passwordHash)) {
+    return null;
+  }
+  return carrier;
+}
+
+export async function createPortalSession(carrierId: string) {
+  const token = createSessionToken(carrierId);
+  const store = await cookies();
+  store.set(PORTAL_SESSION_COOKIE, token, {
+    httpOnly: true,
+    secure: process.env.NODE_ENV === "production",
+    sameSite: "lax",
+    path: "/",
+    maxAge: SESSION_TTL_SECONDS,
+  });
 }

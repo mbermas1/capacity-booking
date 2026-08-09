@@ -1,8 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
-import { cookies } from "next/headers";
-import { prisma } from "@/lib/prisma";
-import { createSessionToken, verifyPassword, SESSION_TTL_SECONDS } from "@/lib/portal-auth";
-import { PORTAL_SESSION_COOKIE } from "@/lib/portal-session";
+import { authenticateCarrier, createPortalSession } from "@/lib/portal-session";
 
 type LoginBody = {
   email?: unknown;
@@ -31,25 +28,12 @@ export async function POST(request: NextRequest) {
     );
   }
 
-  const invalidCredentials = NextResponse.json(
-    { error: "Invalid email or password" },
-    { status: 401 },
-  );
-
-  const carrier = await prisma.carrier.findUnique({ where: { email: body.email.trim() } });
-  if (!carrier || !carrier.passwordHash || !verifyPassword(body.password, carrier.passwordHash)) {
-    return invalidCredentials;
+  const carrier = await authenticateCarrier(body.email.trim(), body.password);
+  if (!carrier) {
+    return NextResponse.json({ error: "Invalid email or password" }, { status: 401 });
   }
 
-  const token = createSessionToken(carrier.id);
-  const store = await cookies();
-  store.set(PORTAL_SESSION_COOKIE, token, {
-    httpOnly: true,
-    secure: process.env.NODE_ENV === "production",
-    sameSite: "lax",
-    path: "/",
-    maxAge: SESSION_TTL_SECONDS,
-  });
+  await createPortalSession(carrier.id);
 
   return NextResponse.json({ carrier: { id: carrier.id, name: carrier.name, email: carrier.email } });
 }
