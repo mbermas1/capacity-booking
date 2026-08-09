@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
+import { CARRIER_NAME_INCLUDE, withCarrierName } from "@/lib/booking-response";
 import { prisma } from "@/lib/prisma";
 
 const DEFAULT_LIMIT = 20;
@@ -41,14 +42,15 @@ export async function GET(
   }
 
   const [total, bookings] = await Promise.all([
-    prisma.booking.count({ where: { carrierName } }),
+    prisma.booking.count({ where: { carrier: { name: carrierName } } }),
     prisma.booking.findMany({
-      where: { carrierName },
+      where: { carrier: { name: carrierName } },
+      include: CARRIER_NAME_INCLUDE,
       orderBy: { startTime: "desc" },
       skip: offset,
       take: limit,
     }),
   ]);
 
-  return NextResponse.json({ carrierName, total, limit, offset, bookings });
+  return NextResponse.json({ carrierName, total, limit, offset, bookings: bookings.map(withCarrierName) });
 }

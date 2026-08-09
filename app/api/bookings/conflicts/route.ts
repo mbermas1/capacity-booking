@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
+import { CARRIER_NAME_INCLUDE, withCarrierName } from "@/lib/booking-response";
 import { prisma } from "@/lib/prisma";
 import type { Booking } from "@/app/generated/prisma/client";
 
@@ -53,22 +54,23 @@ export async function GET(request: NextRequest) {
       startTime: { lt: endTime as Date },
       endTime: { gt: startTime as Date },
     },
+    include: CARRIER_NAME_INCLUDE,
     orderBy: [{ dockId: "asc" }, { startTime: "asc" }],
   });
 
-  const byDock = new Map<string, Booking[]>();
+  const byDock = new Map<string, typeof bookings>();
   for (const booking of bookings) {
     const group = byDock.get(booking.dockId);
     if (group) group.push(booking);
     else byDock.set(booking.dockId, [booking]);
   }
 
-  const conflicts: { dockId: string; bookings: [Booking, Booking] }[] = [];
+  const conflicts: { dockId: string; bookings: [ReturnType<typeof withCarrierName>, ReturnType<typeof withCarrierName>] }[] = [];
   for (const [dock, group] of byDock) {
     for (let i = 0; i < group.length; i++) {
       for (let j = i + 1; j < group.length; j++) {
         if (overlaps(group[i], group[j])) {
-          conflicts.push({ dockId: dock, bookings: [group[i], group[j]] });
+          conflicts.push({ dockId: dock, bookings: [withCarrierName(group[i]), withCarrierName(group[j])] });
         }
       }
     }

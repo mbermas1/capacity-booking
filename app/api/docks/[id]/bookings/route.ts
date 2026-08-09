@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
+import { CARRIER_NAME_INCLUDE, withCarrierName } from "@/lib/booking-response";
 import { prisma } from "@/lib/prisma";
 
 const DEFAULT_LIMIT = 20;
@@ -44,11 +45,12 @@ export async function GET(
     prisma.booking.count({ where: { dockId: id } }),
     prisma.booking.findMany({
       where: { dockId: id },
+      include: CARRIER_NAME_INCLUDE,
       orderBy: { startTime: "desc" },
       skip: offset,
       take: limit,
     }),
   ]);
 
-  return NextResponse.json({ total, limit, offset, bookings });
+  return NextResponse.json({ total, limit, offset, bookings: bookings.map(withCarrierName) });
 }

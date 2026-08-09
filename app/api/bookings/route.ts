@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { BookingOverlapError, createBooking } from "@/lib/bookings";
+import { CARRIER_NAME_INCLUDE, withCarrierName } from "@/lib/booking-response";
 import { prisma } from "@/lib/prisma";
 import { BookingStatus, LoadType, Prisma } from "@/app/generated/prisma/client";
 
@@ -37,13 +38,14 @@ export async function GET(request: NextRequest) {
   const bookings = await prisma.booking.findMany({
     where: {
       ...(dockId !== null ? { dockId } : {}),
-      ...(carrierName !== null ? { carrierName: { contains: carrierName } } : {}),
+      ...(carrierName !== null ? { carrier: { name: { contains: carrierName } } } : {}),
       ...(referenceNumber !== null ? { referenceNumber: { contains: referenceNumber } } : {}),
     },
+    include: CARRIER_NAME_INCLUDE,
     orderBy: { startTime: "asc" },
   });
 
-  return NextResponse.json(bookings);
+  return NextResponse.json(bookings.map(withCarrierName));
 }
 
 type CreateBookingBody = {
@@ -110,17 +112,24 @@ export async function POST(request: NextRequest) {
   }
 
   try {
+    const carrierName = (body.carrierName as string).trim();
+    const carrier = await prisma.carrier.upsert({
+      where: { name: carrierName },
+      create: { name: carrierName },
+      update: {},
+    });
+
     const booking = await createBooking({
       dockId: body.dockId as string,
       startTime: startTime as Date,
       endTime: endTime as Date,
-      carrierName: (body.carrierName as string).trim(),
+      carrierId: carrier.id,
       referenceNumber: (body.referenceNumber as string).trim(),
       loadType: body.loadType as LoadType,
       status,
     });
 
-    return NextResponse.json(booking, { status: 201 });
+    return NextResponse.json(withCarrierName(booking), { status: 201 });
   } catch (error) {
     if (error instanceof BookingOverlapError) {
       return NextResponse.json({ error: error.message }, { status: 409 });

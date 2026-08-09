@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
+import { CARRIER_NAME_INCLUDE, withCarrierName } from "@/lib/booking-response";
 import { prisma } from "@/lib/prisma";
 import { BookingStatus, Prisma } from "@/app/generated/prisma/client";
 
@@ -12,12 +13,12 @@ export async function GET(
 ) {
   const { id } = await params;
 
-  const booking = await prisma.booking.findUnique({ where: { id } });
+  const booking = await prisma.booking.findUnique({ where: { id }, include: CARRIER_NAME_INCLUDE });
   if (!booking) {
     return NextResponse.json({ error: "Booking not found" }, { status: 404 });
   }
 
-  return NextResponse.json(booking);
+  return NextResponse.json(withCarrierName(booking));
 }
 
 export async function PATCH(
@@ -51,9 +52,10 @@ export async function PATCH(
     const booking = await prisma.booking.update({
       where: { id },
       data: { status: body.status as BookingStatus },
+      include: CARRIER_NAME_INCLUDE,
     });
 
-    return NextResponse.json(booking);
+    return NextResponse.json(withCarrierName(booking));
   } catch (error) {
     if (error instanceof Prisma.PrismaClientKnownRequestError && error.code === "P2025") {
       return NextResponse.json({ error: "Booking not found" }, { status: 404 });

@@ -83,7 +83,7 @@ export async function GET(
 
   const bookings = await prisma.booking.findMany({
     where: {
-      carrierName,
+      carrier: { name: carrierName },
       ...(dockId !== null ? { dockId } : {}),
       startTime: { lt: rangeEndDate },
       endTime: { gt: rangeStartDate },

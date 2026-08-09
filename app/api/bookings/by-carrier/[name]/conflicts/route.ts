@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
+import { CARRIER_NAME_INCLUDE, withCarrierName } from "@/lib/booking-response";
 import { prisma } from "@/lib/prisma";
 import type { Booking } from "@/app/generated/prisma/client";
 
@@ -46,18 +47,19 @@ export async function GET(
 
   const bookings = await prisma.booking.findMany({
     where: {
-      carrierName,
+      carrier: { name: carrierName },
       startTime: { lt: endTime as Date },
       endTime: { gt: startTime as Date },
     },
+    include: CARRIER_NAME_INCLUDE,
     orderBy: { startTime: "asc" },
   });
 
-  const conflicts: { bookings: [Booking, Booking] }[] = [];
+  const conflicts: { bookings: [ReturnType<typeof withCarrierName>, ReturnType<typeof withCarrierName>] }[] = [];
   for (let i = 0; i < bookings.length; i++) {
     for (let j = i + 1; j < bookings.length; j++) {
       if (overlaps(bookings[i], bookings[j])) {
-        conflicts.push({ bookings: [bookings[i], bookings[j]] });
+        conflicts.push({ bookings: [withCarrierName(bookings[i]), withCarrierName(bookings[j])] });
       }
     }
   }

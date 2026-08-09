@@ -1,4 +1,5 @@
 import { prisma } from "@/lib/prisma";
+import { CARRIER_NAME_INCLUDE } from "@/lib/booking-response";
 import type {
   BookingStatus,
   LoadType,
@@ -16,7 +17,7 @@ export type CreateBookingInput = {
   dockId: string;
   startTime: Date;
   endTime: Date;
-  carrierName: string;
+  carrierId: string;
   referenceNumber: string;
   loadType: LoadType;
   status?: BookingStatus;
@@ -42,6 +43,6 @@ export async function createBooking(input: CreateBookingInput) {
       throw new BookingOverlapError();
     }
 
-    return tx.booking.create({ data: input });
+    return tx.booking.create({ data: input, include: CARRIER_NAME_INCLUDE });
   });
 }

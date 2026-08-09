@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
+import { CARRIER_NAME_INCLUDE, withCarrierName } from "@/lib/booking-response";
 import { prisma } from "@/lib/prisma";
 import { BookingStatus, LoadType } from "@/app/generated/prisma/client";
 
@@ -148,12 +149,31 @@ export async function POST(request: NextRequest) {
           throw new BulkOverlapError(index, item.referenceNumber);
         }
 
-        created.push(await tx.booking.create({ data: item }));
+        const carrier = await tx.carrier.upsert({
+          where: { name: item.carrierName },
+          create: { name: item.carrierName },
+          update: {},
+        });
+
+        created.push(
+          await tx.booking.create({
+            data: {
+              dockId: item.dockId,
+              startTime: item.startTime,
+              endTime: item.endTime,
+              carrierId: carrier.id,
+              referenceNumber: item.referenceNumber,
+              loadType: item.loadType,
+              status: item.status,
+            },
+            include: CARRIER_NAME_INCLUDE,
+          }),
+        );
       }
       return created;
     });
 
-    return NextResponse.json({ bookings }, { status: 201 });
+    return NextResponse.json({ bookings: bookings.map(withCarrierName) }, { status: 201 });
   } catch (error) {
     if (error instanceof BulkOverlapError) {
       return NextResponse.json({ error: error.message }, { status: 409 });

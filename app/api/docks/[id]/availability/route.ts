@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
-import { prisma } from "@/lib/prisma";
+import { getDockAvailability } from "@/lib/availability";
 
 function isNonEmptyString(value: unknown): value is string {
   return typeof value === "string" && value.trim().length > 0;
@@ -34,19 +34,10 @@ export async function GET(
     return NextResponse.json({ error: "Validation failed", details: errors }, { status: 400 });
   }
 
-  const dock = await prisma.dock.findUnique({ where: { id } });
-  if (!dock) {
+  const availability = await getDockAvailability(id, startTime as Date, endTime as Date);
+  if (!availability) {
     return NextResponse.json({ error: "Dock not found" }, { status: 404 });
   }
 
-  const conflicts = await prisma.booking.findMany({
-    where: {
-      dockId: id,
-      startTime: { lt: endTime as Date },
-      endTime: { gt: startTime as Date },
-    },
-    orderBy: { startTime: "asc" },
-  });
-
-  return NextResponse.json({ available: conflicts.length === 0, conflicts });
+  return NextResponse.json(availability);
 }
