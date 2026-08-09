@@ -6,20 +6,22 @@ import { BookingStatus, LoadType, Prisma } from "@/app/generated/prisma/client";
 export async function GET(request: NextRequest) {
   const dockId = request.nextUrl.searchParams.get("dockId");
 
-  if (!isNonEmptyString(dockId)) {
-    return NextResponse.json(
-      { error: "Validation failed", details: ["dockId query parameter is required"] },
-      { status: 400 },
-    );
-  }
+  if (dockId !== null) {
+    if (!isNonEmptyString(dockId)) {
+      return NextResponse.json(
+        { error: "Validation failed", details: ["dockId query parameter must not be empty"] },
+        { status: 400 },
+      );
+    }
 
-  const dock = await prisma.dock.findUnique({ where: { id: dockId } });
-  if (!dock) {
-    return NextResponse.json({ error: "Dock not found" }, { status: 404 });
+    const dock = await prisma.dock.findUnique({ where: { id: dockId } });
+    if (!dock) {
+      return NextResponse.json({ error: "Dock not found" }, { status: 404 });
+    }
   }
 
   const bookings = await prisma.booking.findMany({
-    where: { dockId },
+    where: dockId !== null ? { dockId } : undefined,
     orderBy: { startTime: "asc" },
   });
 
