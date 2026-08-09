@@ -1,0 +1,51 @@
+// This is your Prisma schema file,
+// learn more about it in the docs: https://pris.ly/d/prisma-schema
+
+// Get a free hosted Postgres database in seconds: `npx create-db`
+
+generator client {
+  provider = "prisma-client"
+  output   = "../app/generated/prisma"
+}
+
+datasource db {
+  provider = "sqlite"
+}
+
+model Dock {
+  id            String    @id @default(cuid())
+  name          String
+  location      String
+  equipmentType String
+  bookings      Booking[]
+  createdAt     DateTime  @default(now())
+  updatedAt     DateTime  @updatedAt
+}
+
+model Booking {
+  id              String        @id @default(cuid())
+  dock            Dock          @relation(fields: [dockId], references: [id])
+  dockId          String
+  startTime       DateTime
+  endTime         DateTime
+  carrierName     String
+  referenceNumber String
+  status          BookingStatus @default(SCHEDULED)
+  loadType        LoadType
+  createdAt       DateTime      @default(now())
+  updatedAt       DateTime      @updatedAt
+
+  @@index([dockId, startTime, endTime])
+}
+
+enum BookingStatus {
+  SCHEDULED
+  CHECKED_IN
+  COMPLETED
+  NO_SHOW
+}
+
+enum LoadType {
+  INBOUND
+  OUTBOUND
+}
