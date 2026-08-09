@@ -6,7 +6,7 @@ async function main() {
   const [, , name, email, password] = process.argv;
   if (!name || !email || !password) {
     console.error(
-      "Usage: npx tsx scripts/create-carrier-account.ts <name> <email> <password>",
+      "Usage: npx tsx scripts/create-staff-account.ts <name> <email> <password>",
     );
     process.exit(1);
   }
@@ -14,13 +14,13 @@ async function main() {
   const adapter = new PrismaBetterSqlite3({ url: process.env.DATABASE_URL ?? "file:./dev.db" });
   const prisma = new PrismaClient({ adapter });
 
-  const carrier = await prisma.carrier.upsert({
-    where: { name },
+  const staff = await prisma.staff.upsert({
+    where: { email },
     create: { name, email, passwordHash: hashPassword(password) },
-    update: { email, passwordHash: hashPassword(password) },
+    update: { name, passwordHash: hashPassword(password) },
   });
 
-  console.log(`Carrier account ready: ${carrier.name} <${carrier.email}> (id: ${carrier.id})`);
+  console.log(`Staff account ready: ${staff.name} <${staff.email}> (id: ${staff.id})`);
   await prisma.$disconnect();
 }
 

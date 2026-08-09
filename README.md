@@ -22,26 +22,30 @@ This project uses [`next/font`](https://nextjs.org/docs/app/building-your-applic
 
 ## Carrier Portal — Creating Carrier Accounts
 
-Carriers log in to their own portal at `/portal` to view their bookings and book dock slots themselves. There's no self-registration — staff provision each carrier's login with a script, run from a checkout of this repo:
+Carriers log in to their own portal at `/portal` to view their bookings and book dock slots themselves. Staff manage carrier logins in-app at **`/staff`** — no CLI needed for this day to day. There's still no self-registration for carriers; a staff member always provisions the account first.
+
+At `/staff`, a logged-in staff member can:
+- Create a new carrier account (name, email, password)
+- Reset an existing carrier's email/password — submitting with a carrier name that already exists updates that account instead of creating a duplicate, so this doubles as the "forgot password" flow
+- See every carrier, their booking count, and whether a login is set up yet
+
+**The carrier name must exactly match** the name already used on that carrier's bookings (case-sensitive) for a reset to attach to their existing history rather than creating a disconnected duplicate — the form's name field autocompletes from existing carriers to help avoid typos.
+
+### Staff Accounts
+
+Staff accounts have no self-registration either, and (unlike carriers) there's currently no in-app way for one staff member to create another — so the first staff account, and any additional ones, are created with a bootstrap script:
 
 ```bash
-npx tsx scripts/create-carrier-account.ts "<carrier name>" "<email>" "<password>"
+npx tsx scripts/create-staff-account.ts "<name>" "<email>" "<password>"
 ```
 
 Example:
 
 ```bash
-npx tsx scripts/create-carrier-account.ts "Acme Logistics" ops@acmelogistics.com "a-strong-password"
+npx tsx scripts/create-staff-account.ts "Jordan Lee" jordan@yourcompany.com "a-strong-password"
 ```
 
-**Requirements:**
-- Run from the project root, with `.env` present (needs `DATABASE_URL` and `PORTAL_SESSION_SECRET` — ask a maintainer if you don't have these).
-- `npx tsx` downloads the `tsx` runner on first use; no separate install needed.
-
-**Notes:**
-- `<carrier name>` must **exactly match** the carrier name already used on that carrier's bookings (case-sensitive), so the new login attaches to their existing booking history instead of creating a duplicate, disconnected carrier record. Check `GET /api/bookings/carriers` if you're not sure of the exact spelling on file.
-- The script is safe to re-run for an existing carrier — it updates the email/password rather than erroring, so re-running it is how you reset a carrier's password.
-- There's currently no staff-auth system protecting this, which is exactly why it's a script you run yourself rather than a button in the app or an API endpoint anyone could call.
+Requires `.env` to be present with `DATABASE_URL` and `STAFF_SESSION_SECRET` set (ask a maintainer if you don't have these). Safe to re-run — it upserts by email, so re-running it for an existing address resets that person's name/password.
 
 ## Learn More
 
