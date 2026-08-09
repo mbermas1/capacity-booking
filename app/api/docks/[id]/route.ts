@@ -6,6 +6,7 @@ type UpdateDockBody = {
   name?: unknown;
   location?: unknown;
   equipmentType?: unknown;
+  warehouseId?: unknown;
 };
 
 function isNonEmptyString(value: unknown): value is string {
@@ -43,7 +44,7 @@ export async function PATCH(
   }
 
   const errors: string[] = [];
-  const data: { name?: string; location?: string; equipmentType?: string } = {};
+  const data: { name?: string; location?: string; equipmentType?: string; warehouseId?: string } = {};
 
   if (body.name !== undefined) {
     if (!isNonEmptyString(body.name)) errors.push("name must be a non-empty string");
@@ -60,8 +61,13 @@ export async function PATCH(
     else data.equipmentType = body.equipmentType.trim();
   }
 
+  if (body.warehouseId !== undefined) {
+    if (!isNonEmptyString(body.warehouseId)) errors.push("warehouseId must be a non-empty string");
+    else data.warehouseId = body.warehouseId.trim();
+  }
+
   if (Object.keys(data).length === 0 && errors.length === 0) {
-    errors.push("At least one of name, location, equipmentType must be provided");
+    errors.push("At least one of name, location, equipmentType, warehouseId must be provided");
   }
 
   if (errors.length > 0) {
@@ -72,8 +78,13 @@ export async function PATCH(
     const dock = await prisma.dock.update({ where: { id }, data });
     return NextResponse.json(dock);
   } catch (error) {
-    if (error instanceof Prisma.PrismaClientKnownRequestError && error.code === "P2025") {
-      return NextResponse.json({ error: "Dock not found" }, { status: 404 });
+    if (error instanceof Prisma.PrismaClientKnownRequestError) {
+      if (error.code === "P2025") {
+        return NextResponse.json({ error: "Dock not found" }, { status: 404 });
+      }
+      if (error.code === "P2003") {
+        return NextResponse.json({ error: "Warehouse not found" }, { status: 404 });
+      }
     }
 
     console.error("Failed to update dock:", error);

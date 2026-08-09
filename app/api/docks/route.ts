@@ -1,8 +1,25 @@
 import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
+import { Prisma } from "@/app/generated/prisma/client";
 
-export async function GET() {
-  const docks = await prisma.dock.findMany({ orderBy: { name: "asc" } });
+function isNonEmptyString(value: unknown): value is string {
+  return typeof value === "string" && value.trim().length > 0;
+}
+
+export async function GET(request: NextRequest) {
+  const warehouseId = request.nextUrl.searchParams.get("warehouseId");
+
+  if (warehouseId !== null && !isNonEmptyString(warehouseId)) {
+    return NextResponse.json(
+      { error: "Validation failed", details: ["warehouseId query parameter must not be empty"] },
+      { status: 400 },
+    );
+  }
+
+  const docks = await prisma.dock.findMany({
+    where: warehouseId !== null ? { warehouseId } : undefined,
+    orderBy: { name: "asc" },
+  });
   return NextResponse.json(docks);
 }
 
@@ -10,11 +27,8 @@ type CreateDockBody = {
   name?: unknown;
   location?: unknown;
   equipmentType?: unknown;
+  warehouseId?: unknown;
 };
-
-function isNonEmptyString(value: unknown): value is string {
-  return typeof value === "string" && value.trim().length > 0;
-}
 
 export async function POST(request: NextRequest) {
   let body: CreateDockBody;
@@ -32,18 +46,29 @@ export async function POST(request: NextRequest) {
   if (!isNonEmptyString(body.name)) errors.push("name is required");
   if (!isNonEmptyString(body.location)) errors.push("location is required");
   if (!isNonEmptyString(body.equipmentType)) errors.push("equipmentType is required");
+  if (!isNonEmptyString(body.warehouseId)) errors.push("warehouseId is required");
 
   if (errors.length > 0) {
     return NextResponse.json({ error: "Validation failed", details: errors }, { status: 400 });
   }
 
-  const dock = await prisma.dock.create({
-    data: {
-      name: (body.name as string).trim(),
-      location: (body.location as string).trim(),
-      equipmentType: (body.equipmentType as string).trim(),
-    },
-  });
+  try {
+    const dock = await prisma.dock.create({
+      data: {
+        name: (body.name as string).trim(),
+        location: (body.location as string).trim(),
+        equipmentType: (body.equipmentType as string).trim(),
+        warehouseId: body.warehouseId as string,
+      },
+    });
 
-  return NextResponse.json(dock, { status: 201 });
+    return NextResponse.json(dock, { status: 201 });
+  } catch (error) {
+    if (error instanceof Prisma.PrismaClientKnownRequestError && error.code === "P2003") {
+      return NextResponse.json({ error: "Warehouse not found" }, { status: 404 });
+    }
+
+    console.error("Failed to create dock:", error);
+    return NextResponse.json({ error: "Internal server error" }, { status: 500 });
+  }
 }

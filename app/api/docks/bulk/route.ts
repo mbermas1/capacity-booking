@@ -5,6 +5,7 @@ type BulkDockInput = {
   name?: unknown;
   location?: unknown;
   equipmentType?: unknown;
+  warehouseId?: unknown;
 };
 
 function isNonEmptyString(value: unknown): value is string {
@@ -43,10 +44,23 @@ export async function POST(request: NextRequest) {
     if (!isNonEmptyString(item?.name)) errors.push(`docks[${index}].name is required`);
     if (!isNonEmptyString(item?.location)) errors.push(`docks[${index}].location is required`);
     if (!isNonEmptyString(item?.equipmentType)) errors.push(`docks[${index}].equipmentType is required`);
+    if (!isNonEmptyString(item?.warehouseId)) errors.push(`docks[${index}].warehouseId is required`);
   });
 
   if (errors.length > 0) {
     return NextResponse.json({ error: "Validation failed", details: errors }, { status: 400 });
+  }
+
+  const requestedWarehouseIds = [...new Set(docksInput.map((item) => item.warehouseId as string))];
+  const foundWarehouses = await prisma.warehouse.findMany({ where: { id: { in: requestedWarehouseIds } } });
+  const foundWarehouseIds = new Set(foundWarehouses.map((w) => w.id));
+  const missingWarehouseIds = requestedWarehouseIds.filter((id) => !foundWarehouseIds.has(id));
+
+  if (missingWarehouseIds.length > 0) {
+    return NextResponse.json(
+      { error: "Warehouse not found", details: missingWarehouseIds },
+      { status: 404 },
+    );
   }
 
   const docks = await prisma.$transaction(async (tx) => {
@@ -58,6 +72,7 @@ export async function POST(request: NextRequest) {
             name: (item.name as string).trim(),
             location: (item.location as string).trim(),
             equipmentType: (item.equipmentType as string).trim(),
+            warehouseId: item.warehouseId as string,
           },
         }),
       );
