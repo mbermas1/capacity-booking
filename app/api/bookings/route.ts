@@ -4,16 +4,25 @@ import { prisma } from "@/lib/prisma";
 import { BookingStatus, LoadType, Prisma } from "@/app/generated/prisma/client";
 
 export async function GET(request: NextRequest) {
-  const dockId = request.nextUrl.searchParams.get("dockId");
+  const searchParams = request.nextUrl.searchParams;
+  const dockId = searchParams.get("dockId");
+  const carrierName = searchParams.get("carrierName");
+
+  const errors: string[] = [];
+
+  if (dockId !== null && !isNonEmptyString(dockId)) {
+    errors.push("dockId query parameter must not be empty");
+  }
+
+  if (carrierName !== null && !isNonEmptyString(carrierName)) {
+    errors.push("carrierName query parameter must not be empty");
+  }
+
+  if (errors.length > 0) {
+    return NextResponse.json({ error: "Validation failed", details: errors }, { status: 400 });
+  }
 
   if (dockId !== null) {
-    if (!isNonEmptyString(dockId)) {
-      return NextResponse.json(
-        { error: "Validation failed", details: ["dockId query parameter must not be empty"] },
-        { status: 400 },
-      );
-    }
-
     const dock = await prisma.dock.findUnique({ where: { id: dockId } });
     if (!dock) {
       return NextResponse.json({ error: "Dock not found" }, { status: 404 });
@@ -21,7 +30,10 @@ export async function GET(request: NextRequest) {
   }
 
   const bookings = await prisma.booking.findMany({
-    where: dockId !== null ? { dockId } : undefined,
+    where: {
+      ...(dockId !== null ? { dockId } : {}),
+      ...(carrierName !== null ? { carrierName: { contains: carrierName } } : {}),
+    },
     orderBy: { startTime: "asc" },
   });
 
