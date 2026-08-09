@@ -66,3 +66,31 @@ export async function PATCH(
     return NextResponse.json({ error: "Internal server error" }, { status: 500 });
   }
 }
+
+export async function DELETE(
+  request: NextRequest,
+  { params }: { params: Promise<{ id: string }> },
+) {
+  const { id } = await params;
+
+  try {
+    await prisma.dock.delete({ where: { id } });
+    return new NextResponse(null, { status: 204 });
+  } catch (error) {
+    if (error instanceof Prisma.PrismaClientKnownRequestError) {
+      if (error.code === "P2025") {
+        return NextResponse.json({ error: "Dock not found" }, { status: 404 });
+      }
+
+      if (error.code === "P2003" || error.code === "P2014") {
+        return NextResponse.json(
+          { error: "Cannot delete a dock that has bookings" },
+          { status: 409 },
+        );
+      }
+    }
+
+    console.error("Failed to delete dock:", error);
+    return NextResponse.json({ error: "Internal server error" }, { status: 500 });
+  }
+}
