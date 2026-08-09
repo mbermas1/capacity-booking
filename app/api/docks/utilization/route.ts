@@ -7,24 +7,48 @@ function isNonEmptyString(value: unknown): value is string {
 
 export async function GET(request: NextRequest) {
   const searchParams = request.nextUrl.searchParams;
+  const dateParam = searchParams.get("date");
   const startTimeParam = searchParams.get("startTime");
   const endTimeParam = searchParams.get("endTime");
   const dockId = searchParams.get("dockId");
 
   const errors: string[] = [];
+  let rangeStart: Date | null = null;
+  let rangeEnd: Date | null = null;
 
-  const startTime = isNonEmptyString(startTimeParam) ? new Date(startTimeParam) : null;
-  if (!startTime || Number.isNaN(startTime.getTime())) {
-    errors.push("startTime query parameter must be a valid ISO 8601 date string");
-  }
+  if (dateParam !== null) {
+    if (startTimeParam !== null || endTimeParam !== null) {
+      errors.push("Provide either date or startTime/endTime, not both");
+    }
 
-  const endTime = isNonEmptyString(endTimeParam) ? new Date(endTimeParam) : null;
-  if (!endTime || Number.isNaN(endTime.getTime())) {
-    errors.push("endTime query parameter must be a valid ISO 8601 date string");
-  }
+    if (!/^\d{4}-\d{2}-\d{2}$/.test(dateParam)) {
+      errors.push("date query parameter must be in YYYY-MM-DD format");
+    } else {
+      const dayStart = new Date(`${dateParam}T00:00:00.000Z`);
+      if (Number.isNaN(dayStart.getTime())) {
+        errors.push("date query parameter must be a valid calendar date");
+      } else {
+        rangeStart = dayStart;
+        rangeEnd = new Date(dayStart.getTime() + 24 * 60 * 60 * 1000);
+      }
+    }
+  } else {
+    const startTime = isNonEmptyString(startTimeParam) ? new Date(startTimeParam) : null;
+    if (!startTime || Number.isNaN(startTime.getTime())) {
+      errors.push("startTime query parameter must be a valid ISO 8601 date string");
+    }
 
-  if (startTime && endTime && endTime <= startTime) {
-    errors.push("endTime must be after startTime");
+    const endTime = isNonEmptyString(endTimeParam) ? new Date(endTimeParam) : null;
+    if (!endTime || Number.isNaN(endTime.getTime())) {
+      errors.push("endTime query parameter must be a valid ISO 8601 date string");
+    }
+
+    if (startTime && endTime && endTime <= startTime) {
+      errors.push("endTime must be after startTime");
+    }
+
+    rangeStart = startTime;
+    rangeEnd = endTime;
   }
 
   if (dockId !== null && !isNonEmptyString(dockId)) {
@@ -44,23 +68,23 @@ export async function GET(request: NextRequest) {
     return NextResponse.json({ error: "Dock not found" }, { status: 404 });
   }
 
-  const rangeStart = startTime as Date;
-  const rangeEnd = endTime as Date;
-  const rangeMs = rangeEnd.getTime() - rangeStart.getTime();
+  const rangeStartDate = rangeStart as Date;
+  const rangeEndDate = rangeEnd as Date;
+  const rangeMs = rangeEndDate.getTime() - rangeStartDate.getTime();
 
   const bookings = await prisma.booking.findMany({
     where: {
       ...(dockId !== null ? { dockId } : {}),
-      startTime: { lt: rangeEnd },
-      endTime: { gt: rangeStart },
+      startTime: { lt: rangeEndDate },
+      endTime: { gt: rangeStartDate },
     },
   });
 
   const bookedMsByDock = new Map<string, number>();
   const bookingCountByDock = new Map<string, number>();
   for (const booking of bookings) {
-    const overlapStart = booking.startTime > rangeStart ? booking.startTime : rangeStart;
-    const overlapEnd = booking.endTime < rangeEnd ? booking.endTime : rangeEnd;
+    const overlapStart = booking.startTime > rangeStartDate ? booking.startTime : rangeStartDate;
+    const overlapEnd = booking.endTime < rangeEndDate ? booking.endTime : rangeEndDate;
     const durationMs = overlapEnd.getTime() - overlapStart.getTime();
 
     bookedMsByDock.set(booking.dockId, (bookedMsByDock.get(booking.dockId) ?? 0) + durationMs);
@@ -80,8 +104,8 @@ export async function GET(request: NextRequest) {
   });
 
   return NextResponse.json({
-    startTime: rangeStart.toISOString(),
-    endTime: rangeEnd.toISOString(),
+    startTime: rangeStartDate.toISOString(),
+    endTime: rangeEndDate.toISOString(),
     docks: stats,
   });
 }
