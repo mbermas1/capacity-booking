@@ -6,6 +6,20 @@ type UpdateBookingStatusBody = {
   status?: unknown;
 };
 
+export async function GET(
+  request: NextRequest,
+  { params }: { params: Promise<{ id: string }> },
+) {
+  const { id } = await params;
+
+  const booking = await prisma.booking.findUnique({ where: { id } });
+  if (!booking) {
+    return NextResponse.json({ error: "Booking not found" }, { status: 404 });
+  }
+
+  return NextResponse.json(booking);
+}
+
 export async function PATCH(
   request: NextRequest,
   { params }: { params: Promise<{ id: string }> },
