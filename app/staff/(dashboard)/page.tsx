@@ -20,11 +20,29 @@ async function createCarrierAccount(formData: FormData) {
   revalidatePath("/staff");
 }
 
-export default async function StaffCarriersPage() {
-  const carriers = await prisma.carrier.findMany({
-    orderBy: { name: "asc" },
-    include: { _count: { select: { bookings: true } } },
+async function updateCarrierRequirementTags(carrierId: string, formData: FormData) {
+  "use server";
+
+  const selectedTagIds = formData.getAll("tagIds").map(String);
+
+  await prisma.$transaction(async (tx) => {
+    await tx.carrierTag.deleteMany({ where: { carrierId, tag: { category: "CARRIER_REQUIREMENT" } } });
+    if (selectedTagIds.length > 0) {
+      await tx.carrierTag.createMany({ data: selectedTagIds.map((tagId) => ({ carrierId, tagId })) });
+    }
   });
+
+  revalidatePath("/staff");
+}
+
+export default async function StaffCarriersPage() {
+  const [carriers, requirementTags] = await Promise.all([
+    prisma.carrier.findMany({
+      orderBy: { name: "asc" },
+      include: { _count: { select: { bookings: true } }, tags: { include: { tag: true } } },
+    }),
+    prisma.tag.findMany({ where: { category: "CARRIER_REQUIREMENT" }, orderBy: { name: "asc" } }),
+  ]);
 
   return (
     <div className="flex flex-col gap-8">
@@ -98,26 +116,50 @@ export default async function StaffCarriersPage() {
           <p className="text-sm text-zinc-500 dark:text-zinc-500">No carriers yet.</p>
         ) : (
           <ul className="flex flex-col divide-y divide-black/[.06] rounded-2xl border border-black/[.08] bg-white px-4 dark:divide-white/[.08] dark:border-white/[.145] dark:bg-[#0a0a0a]">
-            {carriers.map((carrier) => (
-              <li key={carrier.id} className="flex flex-wrap items-center justify-between gap-2 py-3">
-                <div className="flex flex-col gap-0.5">
-                  <span className="text-sm font-medium text-black dark:text-zinc-50">{carrier.name}</span>
-                  <span className="text-xs text-zinc-500 dark:text-zinc-400">
-                    {carrier.email ?? "no email on file"} · {carrier._count.bookings} booking
-                    {carrier._count.bookings === 1 ? "" : "s"}
-                  </span>
-                </div>
-                <span
-                  className={`rounded-full px-2 py-0.5 text-xs font-medium ${
-                    carrier.passwordHash
-                      ? "bg-green-100 text-green-800 dark:bg-green-950 dark:text-green-300"
-                      : "bg-zinc-100 text-zinc-600 dark:bg-zinc-800 dark:text-zinc-400"
-                  }`}
-                >
-                  {carrier.passwordHash ? "Login enabled" : "No login"}
-                </span>
-              </li>
-            ))}
+            {carriers.map((carrier) => {
+              const assignedTagIds = new Set(carrier.tags.map((ct) => ct.tagId));
+              return (
+                <li key={carrier.id} className="flex flex-col gap-2 py-3">
+                  <div className="flex flex-wrap items-center justify-between gap-2">
+                    <div className="flex flex-col gap-0.5">
+                      <span className="text-sm font-medium text-black dark:text-zinc-50">{carrier.name}</span>
+                      <span className="text-xs text-zinc-500 dark:text-zinc-400">
+                        {carrier.email ?? "no email on file"} · {carrier._count.bookings} booking
+                        {carrier._count.bookings === 1 ? "" : "s"}
+                      </span>
+                    </div>
+                    <span
+                      className={`rounded-full px-2 py-0.5 text-xs font-medium ${
+                        carrier.passwordHash
+                          ? "bg-green-100 text-green-800 dark:bg-green-950 dark:text-green-300"
+                          : "bg-zinc-100 text-zinc-600 dark:bg-zinc-800 dark:text-zinc-400"
+                      }`}
+                    >
+                      {carrier.passwordHash ? "Login enabled" : "No login"}
+                    </span>
+                  </div>
+                  {requirementTags.length > 0 && (
+                    <form
+                      action={updateCarrierRequirementTags.bind(null, carrier.id)}
+                      className="flex flex-wrap items-center gap-3"
+                    >
+                      {requirementTags.map((tag) => (
+                        <label key={tag.id} className="flex items-center gap-1.5 text-xs text-zinc-600 dark:text-zinc-400">
+                          <input type="checkbox" name="tagIds" value={tag.id} defaultChecked={assignedTagIds.has(tag.id)} />
+                          {tag.name}
+                        </label>
+                      ))}
+                      <button
+                        type="submit"
+                        className="h-7 rounded-full border border-black/[.08] px-3 text-xs font-medium transition-colors hover:bg-black/[.04] dark:border-white/[.145] dark:hover:bg-[#1a1a1a]"
+                      >
+                        Save
+                      </button>
+                    </form>
+                  )}
+                </li>
+              );
+            })}
           </ul>
         )}
       </section>

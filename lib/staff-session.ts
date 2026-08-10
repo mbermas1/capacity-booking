@@ -18,7 +18,7 @@ export async function getStaffSession() {
 export async function getStaffMember() {
   const session = await getStaffSession();
   if (!session) return null;
-  return prisma.staff.findUnique({ where: { id: session.staffId } });
+  return prisma.staff.findUnique({ where: { id: session.staffId }, include: { warehouse: true } });
 }
 
 export async function requireStaffSession() {
