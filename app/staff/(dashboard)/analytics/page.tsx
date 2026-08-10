@@ -79,9 +79,11 @@ export default async function StaffAnalyticsPage({
           return {
             date: trend[0].days[i].date,
             utilization: dayUtilizations.reduce((a, b) => a + b, 0) / dayUtilizations.length,
+            bookingCount: trend.reduce((sum, dock) => sum + dock.days[i].bookingCount, 0),
           };
         })
       : [];
+  const warehouseMaxCount = Math.max(1, ...warehouseTrend.map((d) => d.bookingCount));
 
   return (
     <div className="flex flex-col gap-8">
@@ -224,9 +226,21 @@ export default async function StaffAnalyticsPage({
                   />
                 ))}
               </div>
+              <div className="flex h-5 items-end gap-0.5">
+                {warehouseTrend.map((d) => (
+                  <div
+                    key={d.date}
+                    title={`${d.date}: ${d.bookingCount} booking${d.bookingCount === 1 ? "" : "s"}`}
+                    className="flex-1 rounded-t bg-zinc-400 dark:bg-zinc-500"
+                    style={{ height: `${Math.max(2, Math.round((d.bookingCount / warehouseMaxCount) * 100))}%` }}
+                  />
+                ))}
+              </div>
             </div>
           <ul className="flex flex-col divide-y divide-black/[.06] rounded-2xl border border-black/[.08] bg-white px-4 dark:divide-white/[.08] dark:border-white/[.145] dark:bg-[#0a0a0a]">
-            {trend.map((dock) => (
+            {trend.map((dock) => {
+              const dockMaxCount = Math.max(1, ...dock.days.map((d) => d.bookingCount));
+              return (
               <li key={dock.dockId} className="flex flex-col gap-2 py-3">
                 <span className="text-sm font-medium text-black dark:text-zinc-50">{dock.dockName}</span>
                 <div className="flex h-10 items-end gap-0.5">
@@ -239,8 +253,19 @@ export default async function StaffAnalyticsPage({
                     />
                   ))}
                 </div>
+                <div className="flex h-5 items-end gap-0.5">
+                  {dock.days.map((d) => (
+                    <div
+                      key={d.date}
+                      title={`${d.date}: ${d.bookingCount} booking${d.bookingCount === 1 ? "" : "s"}`}
+                      className="flex-1 rounded-t bg-zinc-400 dark:bg-zinc-500"
+                      style={{ height: `${Math.max(2, Math.round((d.bookingCount / dockMaxCount) * 100))}%` }}
+                    />
+                  ))}
+                </div>
               </li>
-            ))}
+              );
+            })}
           </ul>
           </>
         )}

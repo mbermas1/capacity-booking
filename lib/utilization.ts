@@ -70,7 +70,7 @@ function toISODate(date: Date): string {
 export type DockUtilizationTrend = {
   dockId: string;
   dockName: string;
-  days: { date: string; utilization: number }[];
+  days: { date: string; utilization: number; bookingCount: number }[];
 };
 
 /**
@@ -105,6 +105,7 @@ export async function computeUtilizationTrend(
   });
 
   const bookedMsByDockDay = new Map<string, number>(); // key: `${dockId}|${dayIndex}`
+  const bookingCountByDockDay = new Map<string, number>();
   for (const b of bookings) {
     for (let i = 0; i < numDays; i++) {
       const dayStart = new Date(windowStart.getTime() + i * dayMs);
@@ -115,6 +116,7 @@ export async function computeUtilizationTrend(
       if (ms > 0) {
         const key = `${b.dockId}|${i}`;
         bookedMsByDockDay.set(key, (bookedMsByDockDay.get(key) ?? 0) + ms);
+        bookingCountByDockDay.set(key, (bookingCountByDockDay.get(key) ?? 0) + 1);
       }
     }
   }
@@ -130,6 +132,7 @@ export async function computeUtilizationTrend(
     days: Array.from({ length: numDays }, (_, i) => ({
       date: toISODate(new Date(windowStart.getTime() + i * dayMs)),
       utilization: (bookedMsByDockDay.get(`${dock.id}|${i}`) ?? 0) / dayMs,
+      bookingCount: bookingCountByDockDay.get(`${dock.id}|${i}`) ?? 0,
     })),
   }));
 }
