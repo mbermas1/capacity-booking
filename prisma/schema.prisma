@@ -55,15 +55,34 @@ model Dock {
 model Carrier {
   id                  String               @id @default(cuid())
   name                String               @unique
-  email               String?              @unique
-  passwordHash        String?
+  email               String?              @unique // company notification address (confirm/cancel/reschedule/no-show emails) — not a login
   partnerType         PartnerType          @default(CARRIER)
+  users               CarrierUser[]
   tags                CarrierTag[]
   bookings            Booking[]
   cancellationRecords CancellationRecord[]
   scoreAppeals        ScoreAppeal[]
   createdAt           DateTime             @default(now())
   updatedAt           DateTime             @updatedAt
+}
+
+model CarrierUser {
+  id           String          @id @default(cuid())
+  carrier      Carrier         @relation(fields: [carrierId], references: [id], onDelete: Cascade)
+  carrierId    String
+  name         String
+  email        String          @unique
+  passwordHash String
+  role         CarrierUserRole @default(MEMBER)
+  createdAt    DateTime        @default(now())
+  updatedAt    DateTime        @updatedAt
+
+  @@index([carrierId])
+}
+
+enum CarrierUserRole {
+  ADMIN
+  MEMBER
 }
 
 model CancellationRecord {

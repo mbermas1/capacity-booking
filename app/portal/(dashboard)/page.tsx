@@ -1,7 +1,7 @@
 import Link from "next/link";
 import { revalidatePath } from "next/cache";
 import { prisma } from "@/lib/prisma";
-import { getPortalSession } from "@/lib/portal-session";
+import { getPortalCarrier } from "@/lib/portal-session";
 import { notifyBookingCancelled, detectNoShowMany, cancelBooking as cancelBookingRecord } from "@/lib/bookings";
 import { computeCarrierScore, computeCarrierScoreTrend, type CarrierScore } from "@/lib/carrier-score";
 import { STATUS_STYLES, LOAD_TYPE_STYLES, formatTime } from "@/lib/booking-display";
@@ -49,13 +49,13 @@ function ComponentTrendRow({
 async function submitAppeal(formData: FormData) {
   "use server";
 
-  const session = await getPortalSession();
-  if (!session) return;
+  const carrier = await getPortalCarrier();
+  if (!carrier) return;
 
   const note = String(formData.get("note") ?? "").trim();
   if (!note) return;
 
-  await prisma.scoreAppeal.create({ data: { carrierId: session.carrierId, note } });
+  await prisma.scoreAppeal.create({ data: { carrierId: carrier.id, note } });
 
   revalidatePath("/portal");
 }
@@ -63,12 +63,12 @@ async function submitAppeal(formData: FormData) {
 async function cancelBooking(formData: FormData) {
   "use server";
 
-  const session = await getPortalSession();
-  if (!session) return;
+  const carrier = await getPortalCarrier();
+  if (!carrier) return;
 
   const bookingId = String(formData.get("bookingId") ?? "");
   const booking = await prisma.booking.findUnique({ where: { id: bookingId } });
-  if (!booking || booking.carrierId !== session.carrierId) return;
+  if (!booking || booking.carrierId !== carrier.id) return;
 
   const deleted = await cancelBookingRecord(bookingId);
 
@@ -87,17 +87,17 @@ function formatDate(date: Date): string {
 }
 
 export default async function PortalDashboardPage() {
-  const session = await getPortalSession();
-  if (!session) return null;
+  const carrier = await getPortalCarrier();
+  if (!carrier) return null;
 
   const [rawBookings, score, scoreTrend] = await Promise.all([
     prisma.booking.findMany({
-      where: { carrierId: session.carrierId },
+      where: { carrierId: carrier.id },
       include: { dock: true },
       orderBy: { startTime: "desc" },
     }),
-    computeCarrierScore(session.carrierId),
-    computeCarrierScoreTrend(session.carrierId),
+    computeCarrierScore(carrier.id),
+    computeCarrierScoreTrend(carrier.id),
   ]);
   const bookings = await detectNoShowMany(rawBookings);
 

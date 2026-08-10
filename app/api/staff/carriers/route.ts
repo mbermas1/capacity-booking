@@ -6,7 +6,9 @@ import { PartnerType } from "@/app/generated/prisma/client";
 
 type CreateCarrierAccountBody = {
   name?: unknown;
-  email?: unknown;
+  notificationEmail?: unknown;
+  contactName?: unknown;
+  contactEmail?: unknown;
   password?: unknown;
   partnerType?: unknown;
 };
@@ -33,8 +35,12 @@ export async function POST(request: NextRequest) {
 
   const errors: string[] = [];
   if (!isNonEmptyString(body.name)) errors.push("name is required");
-  if (!isNonEmptyString(body.email)) errors.push("email is required");
+  if (!isNonEmptyString(body.contactName)) errors.push("contactName is required");
+  if (!isNonEmptyString(body.contactEmail)) errors.push("contactEmail is required");
   if (!isNonEmptyString(body.password)) errors.push("password is required");
+  if (body.notificationEmail !== undefined && !isNonEmptyString(body.notificationEmail)) {
+    errors.push("notificationEmail must be a non-empty string if provided");
+  }
   if (body.partnerType !== undefined && !Object.values(PartnerType).includes(body.partnerType as PartnerType)) {
     errors.push("partnerType must be one of: " + Object.values(PartnerType).join(", "));
   }
@@ -44,20 +50,26 @@ export async function POST(request: NextRequest) {
   }
 
   const name = (body.name as string).trim();
-  const email = (body.email as string).trim();
+  const notificationEmail = isNonEmptyString(body.notificationEmail) ? body.notificationEmail.trim() : undefined;
+  const contactName = (body.contactName as string).trim();
+  const contactEmail = (body.contactEmail as string).trim();
   const passwordHash = hashPassword(body.password as string);
   const partnerType = body.partnerType as PartnerType | undefined;
 
   const carrier = await prisma.carrier.upsert({
     where: { name },
-    create: { name, email, passwordHash, ...(partnerType !== undefined ? { partnerType } : {}) },
-    update: { email, passwordHash, ...(partnerType !== undefined ? { partnerType } : {}) },
+    create: { name, email: notificationEmail, ...(partnerType !== undefined ? { partnerType } : {}) },
+    update: { email: notificationEmail, ...(partnerType !== undefined ? { partnerType } : {}) },
+  });
+
+  const user = await prisma.carrierUser.upsert({
+    where: { email: contactEmail },
+    create: { carrierId: carrier.id, name: contactName, email: contactEmail, passwordHash, role: "ADMIN" },
+    update: { name: contactName, passwordHash },
   });
 
   return NextResponse.json({
-    id: carrier.id,
-    name: carrier.name,
-    email: carrier.email,
-    partnerType: carrier.partnerType,
+    carrier: { id: carrier.id, name: carrier.name, email: carrier.email, partnerType: carrier.partnerType },
+    user: { id: user.id, name: user.name, email: user.email, role: user.role },
   });
 }

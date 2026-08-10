@@ -1,6 +1,6 @@
 import { notFound, redirect } from "next/navigation";
 import { prisma } from "@/lib/prisma";
-import { getPortalSession } from "@/lib/portal-session";
+import { getPortalCarrier } from "@/lib/portal-session";
 import {
   BookingNotFoundError,
   BookingOverlapError,
@@ -25,14 +25,14 @@ function parseUtc(datetimeLocalValue: string): Date | null {
 async function submitReschedule(bookingId: string, formData: FormData) {
   "use server";
 
-  const session = await getPortalSession();
-  if (!session) redirect("/portal/login");
+  const carrier = await getPortalCarrier();
+  if (!carrier) redirect("/portal/login");
 
   const existing = await prisma.booking.findUnique({
     where: { id: bookingId },
     select: { carrierId: true, priority: true, dockId: true },
   });
-  if (!existing || existing.carrierId !== session.carrierId) notFound();
+  if (!existing || existing.carrierId !== carrier.id) notFound();
 
   const startTimeRaw = String(formData.get("startTime") ?? "");
   const endTimeRaw = String(formData.get("endTime") ?? "");
@@ -96,14 +96,14 @@ export default async function RescheduleBookingPage({
   const { id: bookingId } = await params;
   const { startTime: startTimeParam, endTime: endTimeParam, error } = await searchParams;
 
-  const session = await getPortalSession();
-  if (!session) redirect("/portal/login");
+  const carrier = await getPortalCarrier();
+  if (!carrier) redirect("/portal/login");
 
   const booking = await prisma.booking.findUnique({
     where: { id: bookingId },
     include: { dock: { select: { name: true } } },
   });
-  if (!booking || booking.carrierId !== session.carrierId) notFound();
+  if (!booking || booking.carrierId !== carrier.id) notFound();
 
   const boundSubmitReschedule = submitReschedule.bind(null, bookingId);
 

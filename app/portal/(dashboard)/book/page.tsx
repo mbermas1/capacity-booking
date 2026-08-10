@@ -1,7 +1,7 @@
 import { redirect } from "next/navigation";
 import { prisma } from "@/lib/prisma";
 import { getDockAvailability } from "@/lib/availability";
-import { getPortalSession } from "@/lib/portal-session";
+import { getPortalCarrier } from "@/lib/portal-session";
 import {
   BookingOverlapError,
   DockClosedError,
@@ -25,8 +25,8 @@ function parseUtc(datetimeLocalValue: string): Date | null {
 async function bookSlot(formData: FormData) {
   "use server";
 
-  const session = await getPortalSession();
-  if (!session) redirect("/portal/login");
+  const carrier = await getPortalCarrier();
+  if (!carrier) redirect("/portal/login");
 
   const dockId = String(formData.get("dockId") ?? "");
   const startTimeRaw = String(formData.get("startTime") ?? "");
@@ -66,7 +66,7 @@ async function bookSlot(formData: FormData) {
       dockId,
       startTime,
       endTime,
-      carrierId: session.carrierId,
+      carrierId: carrier.id,
       referenceNumber,
       loadType: loadType as LoadType,
       priority,

@@ -2,21 +2,21 @@ import { NextRequest, NextResponse } from "next/server";
 import { CARRIER_NAME_INCLUDE, withCarrierName } from "@/lib/booking-response";
 import { notifyBookingCancelled, detectNoShow, cancelBooking } from "@/lib/bookings";
 import { prisma } from "@/lib/prisma";
-import { getPortalSession } from "@/lib/portal-session";
+import { getPortalCarrier } from "@/lib/portal-session";
 
 export async function GET(
   request: NextRequest,
   { params }: { params: Promise<{ id: string }> },
 ) {
-  const session = await getPortalSession();
-  if (!session) {
+  const carrier = await getPortalCarrier();
+  if (!carrier) {
     return NextResponse.json({ error: "Not authenticated" }, { status: 401 });
   }
 
   const { id } = await params;
   const rawBooking = await prisma.booking.findUnique({ where: { id }, include: CARRIER_NAME_INCLUDE });
 
-  if (!rawBooking || rawBooking.carrierId !== session.carrierId) {
+  if (!rawBooking || rawBooking.carrierId !== carrier.id) {
     return NextResponse.json({ error: "Booking not found" }, { status: 404 });
   }
   const booking = await detectNoShow(rawBooking);
@@ -28,15 +28,15 @@ export async function DELETE(
   request: NextRequest,
   { params }: { params: Promise<{ id: string }> },
 ) {
-  const session = await getPortalSession();
-  if (!session) {
+  const carrier = await getPortalCarrier();
+  if (!carrier) {
     return NextResponse.json({ error: "Not authenticated" }, { status: 401 });
   }
 
   const { id } = await params;
   const booking = await prisma.booking.findUnique({ where: { id } });
 
-  if (!booking || booking.carrierId !== session.carrierId) {
+  if (!booking || booking.carrierId !== carrier.id) {
     return NextResponse.json({ error: "Booking not found" }, { status: 404 });
   }
 

@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
-import { authenticateCarrier, createPortalSession } from "@/lib/portal-session";
+import { authenticateCarrierUser, createPortalSession } from "@/lib/portal-session";
 
 type LoginBody = {
   email?: unknown;
@@ -28,12 +28,12 @@ export async function POST(request: NextRequest) {
     );
   }
 
-  const carrier = await authenticateCarrier(body.email.trim(), body.password);
-  if (!carrier) {
+  const user = await authenticateCarrierUser(body.email.trim(), body.password);
+  if (!user) {
     return NextResponse.json({ error: "Invalid email or password" }, { status: 401 });
   }
 
-  await createPortalSession(carrier.id);
+  await createPortalSession(user.id);
 
-  return NextResponse.json({ carrier: { id: carrier.id, name: carrier.name, email: carrier.email } });
+  return NextResponse.json({ user: { id: user.id, name: user.name, email: user.email, role: user.role } });
 }

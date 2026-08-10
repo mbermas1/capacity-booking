@@ -1,5 +1,5 @@
 import { redirect } from "next/navigation";
-import { authenticateCarrier, createPortalSession } from "@/lib/portal-session";
+import { authenticateCarrierUser, createPortalSession } from "@/lib/portal-session";
 
 async function login(formData: FormData) {
   "use server";
@@ -11,12 +11,12 @@ async function login(formData: FormData) {
     redirect("/portal/login?error=1");
   }
 
-  const carrier = await authenticateCarrier(email, password);
-  if (!carrier) {
+  const user = await authenticateCarrierUser(email, password);
+  if (!user) {
     redirect("/portal/login?error=1");
   }
 
-  await createPortalSession(carrier.id);
+  await createPortalSession(user.id);
   redirect("/portal");
 }
 

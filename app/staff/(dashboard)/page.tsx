@@ -54,19 +54,27 @@ async function createCarrierAccount(formData: FormData) {
   if (!staff || !canManageCarrierAccounts(staff.role)) return;
 
   const name = String(formData.get("name") ?? "").trim();
-  const email = String(formData.get("email") ?? "").trim();
+  const notificationEmail = String(formData.get("notificationEmail") ?? "").trim();
+  const contactName = String(formData.get("contactName") ?? "").trim();
+  const contactEmail = String(formData.get("contactEmail") ?? "").trim();
   const password = String(formData.get("password") ?? "");
   const partnerTypeRaw = String(formData.get("partnerType") ?? "");
   const partnerType = Object.values(PartnerType).includes(partnerTypeRaw as PartnerType)
     ? (partnerTypeRaw as PartnerType)
     : PartnerType.CARRIER;
 
-  if (!name || !email || !password) return;
+  if (!name || !contactName || !contactEmail || !password) return;
 
-  await prisma.carrier.upsert({
+  const carrier = await prisma.carrier.upsert({
     where: { name },
-    create: { name, email, passwordHash: hashPassword(password), partnerType },
-    update: { email, passwordHash: hashPassword(password), partnerType },
+    create: { name, email: notificationEmail || undefined, partnerType },
+    update: { email: notificationEmail || undefined, partnerType },
+  });
+
+  await prisma.carrierUser.upsert({
+    where: { email: contactEmail },
+    create: { carrierId: carrier.id, name: contactName, email: contactEmail, passwordHash: hashPassword(password), role: "ADMIN" },
+    update: { name: contactName, passwordHash: hashPassword(password) },
   });
 
   revalidatePath("/staff");
@@ -101,7 +109,7 @@ export default async function StaffCarriersPage() {
   const [carriers, requirementTags] = await Promise.all([
     prisma.carrier.findMany({
       orderBy: { name: "asc" },
-      include: { _count: { select: { bookings: true } }, tags: { include: { tag: true } } },
+      include: { _count: { select: { bookings: true, users: true } }, tags: { include: { tag: true } } },
     }),
     prisma.tag.findMany({ where: { category: "CARRIER_REQUIREMENT" }, orderBy: { name: "asc" } }),
   ]);
@@ -143,12 +151,36 @@ export default async function StaffCarriersPage() {
             </datalist>
           </div>
           <div className="flex flex-col gap-1">
-            <label htmlFor="email" className="text-sm font-medium text-zinc-700 dark:text-zinc-300">
-              Email
+            <label htmlFor="notificationEmail" className="text-sm font-medium text-zinc-700 dark:text-zinc-300">
+              Notification Email (optional)
             </label>
             <input
-              id="email"
-              name="email"
+              id="notificationEmail"
+              name="notificationEmail"
+              type="email"
+              placeholder="Where booking confirmations go"
+              className="h-10 rounded-lg border border-black/[.08] bg-white px-3 text-sm text-black dark:border-white/[.145] dark:bg-black dark:text-zinc-50"
+            />
+          </div>
+          <div className="flex flex-col gap-1">
+            <label htmlFor="contactName" className="text-sm font-medium text-zinc-700 dark:text-zinc-300">
+              Contact Name
+            </label>
+            <input
+              id="contactName"
+              name="contactName"
+              type="text"
+              required
+              className="h-10 rounded-lg border border-black/[.08] bg-white px-3 text-sm text-black dark:border-white/[.145] dark:bg-black dark:text-zinc-50"
+            />
+          </div>
+          <div className="flex flex-col gap-1">
+            <label htmlFor="contactEmail" className="text-sm font-medium text-zinc-700 dark:text-zinc-300">
+              Contact Email (login)
+            </label>
+            <input
+              id="contactEmail"
+              name="contactEmail"
               type="email"
               required
               className="h-10 rounded-lg border border-black/[.08] bg-white px-3 text-sm text-black dark:border-white/[.145] dark:bg-black dark:text-zinc-50"
@@ -191,8 +223,10 @@ export default async function StaffCarriersPage() {
           </button>
         </form>
         <p className="mt-2 text-xs text-zinc-500 dark:text-zinc-500">
-          If the carrier name already exists, this resets that carrier&rsquo;s email and password
-          rather than creating a duplicate.
+          If the company name already exists, this attaches a new contact to it rather than creating a
+          duplicate company. If the contact email already has a login, this resets that person&rsquo;s name and
+          password instead of creating a second account. Once a contact has a working login, they can invite
+          teammates themselves from the portal&rsquo;s Team page.
         </p>
       </section>
       )}
@@ -223,12 +257,14 @@ export default async function StaffCarriersPage() {
                       </span>
                       <span
                         className={`rounded-full px-2 py-0.5 text-xs font-medium ${
-                          carrier.passwordHash
+                          carrier._count.users > 0
                             ? "bg-green-100 text-green-800 dark:bg-green-950 dark:text-green-300"
                             : "bg-zinc-100 text-zinc-600 dark:bg-zinc-800 dark:text-zinc-400"
                         }`}
                       >
-                        {carrier.passwordHash ? "Login enabled" : "No login"}
+                        {carrier._count.users > 0
+                          ? `${carrier._count.users} user${carrier._count.users === 1 ? "" : "s"}`
+                          : "No users"}
                       </span>
                       <span className={`rounded-full px-2 py-0.5 text-xs font-medium ${TIER_STYLES[score.tier]}`}>
                         {TIER_LABELS[score.tier]}

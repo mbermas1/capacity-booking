@@ -13,7 +13,7 @@ import {
 import { checkLeadTime } from "@/lib/booking-constraints";
 import { withCarrierName } from "@/lib/booking-response";
 import { prisma } from "@/lib/prisma";
-import { getPortalSession } from "@/lib/portal-session";
+import { getPortalCarrier } from "@/lib/portal-session";
 import { BookingPriority } from "@/app/generated/prisma/client";
 
 type RescheduleBookingBody = {
@@ -26,8 +26,8 @@ function isNonEmptyString(value: unknown): value is string {
 }
 
 export async function PATCH(request: NextRequest, { params }: { params: Promise<{ id: string }> }) {
-  const session = await getPortalSession();
-  if (!session) {
+  const carrier = await getPortalCarrier();
+  if (!carrier) {
     return NextResponse.json({ error: "Not authenticated" }, { status: 401 });
   }
 
@@ -37,7 +37,7 @@ export async function PATCH(request: NextRequest, { params }: { params: Promise<
     where: { id },
     select: { carrierId: true, priority: true, dockId: true },
   });
-  if (!existing || existing.carrierId !== session.carrierId) {
+  if (!existing || existing.carrierId !== carrier.id) {
     return NextResponse.json({ error: "Booking not found" }, { status: 404 });
   }
 

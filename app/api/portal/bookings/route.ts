@@ -14,7 +14,7 @@ import {
 import { checkLeadTime } from "@/lib/booking-constraints";
 import { CARRIER_NAME_INCLUDE, withCarrierName } from "@/lib/booking-response";
 import { prisma } from "@/lib/prisma";
-import { getPortalSession } from "@/lib/portal-session";
+import { getPortalCarrier } from "@/lib/portal-session";
 import { LoadType, BookingPriority } from "@/app/generated/prisma/client";
 
 const DEFAULT_LIMIT = 20;
@@ -31,8 +31,8 @@ function parsePositiveInt(value: string | null): number | null {
 }
 
 export async function GET(request: NextRequest) {
-  const session = await getPortalSession();
-  if (!session) {
+  const carrier = await getPortalCarrier();
+  if (!carrier) {
     return NextResponse.json({ error: "Not authenticated" }, { status: 401 });
   }
 
@@ -56,9 +56,9 @@ export async function GET(request: NextRequest) {
   }
 
   const [total, rawBookings] = await Promise.all([
-    prisma.booking.count({ where: { carrierId: session.carrierId } }),
+    prisma.booking.count({ where: { carrierId: carrier.id } }),
     prisma.booking.findMany({
-      where: { carrierId: session.carrierId },
+      where: { carrierId: carrier.id },
       include: CARRIER_NAME_INCLUDE,
       orderBy: { startTime: "desc" },
       skip: offset,
@@ -82,8 +82,8 @@ type CreatePortalBookingBody = {
 };
 
 export async function POST(request: NextRequest) {
-  const session = await getPortalSession();
-  if (!session) {
+  const carrier = await getPortalCarrier();
+  if (!carrier) {
     return NextResponse.json({ error: "Not authenticated" }, { status: 401 });
   }
 
@@ -165,7 +165,7 @@ export async function POST(request: NextRequest) {
       dockId: body.dockId as string,
       startTime: startTime as Date,
       endTime: endTime as Date,
-      carrierId: session.carrierId,
+      carrierId: carrier.id,
       referenceNumber: (body.referenceNumber as string).trim(),
       loadType: body.loadType as LoadType,
       priority,

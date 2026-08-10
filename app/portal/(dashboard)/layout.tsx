@@ -1,7 +1,8 @@
 import Link from "next/link";
 import { cookies } from "next/headers";
 import { redirect } from "next/navigation";
-import { getPortalCarrier, requirePortalSession, PORTAL_SESSION_COOKIE } from "@/lib/portal-session";
+import { getPortalUser, requirePortalSession, PORTAL_SESSION_COOKIE } from "@/lib/portal-session";
+import { canManageCarrierUsers } from "@/lib/portal-roles";
 import { PARTNER_TYPE_LABELS } from "@/lib/partner-type";
 
 async function logout() {
@@ -13,7 +14,8 @@ async function logout() {
 
 export default async function PortalDashboardLayout({ children }: { children: React.ReactNode }) {
   await requirePortalSession();
-  const carrier = await getPortalCarrier();
+  const user = await getPortalUser();
+  const carrier = user?.carrier ?? null;
   const portalTitle = carrier ? `${PARTNER_TYPE_LABELS[carrier.partnerType]} Portal` : "Carrier Portal";
 
   return (
@@ -30,9 +32,20 @@ export default async function PortalDashboardLayout({ children }: { children: Re
             >
               Book a Slot
             </Link>
+            {user && canManageCarrierUsers(user.role) && (
+              <Link
+                href="/portal/team"
+                className="text-sm font-medium text-zinc-600 hover:text-black dark:text-zinc-400 dark:hover:text-zinc-50"
+              >
+                Team
+              </Link>
+            )}
           </div>
           <div className="flex items-center gap-4">
-            <span className="text-sm text-zinc-600 dark:text-zinc-400">{carrier?.name}</span>
+            <div className="flex flex-col items-end">
+              <span className="text-sm text-zinc-600 dark:text-zinc-400">{user?.name}</span>
+              <span className="text-xs text-zinc-500 dark:text-zinc-500">{carrier?.name}</span>
+            </div>
             <form action={logout}>
               <button
                 type="submit"

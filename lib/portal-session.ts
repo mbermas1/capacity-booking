@@ -10,10 +10,15 @@ export async function getPortalSession() {
   return verifySessionToken(store.get(PORTAL_SESSION_COOKIE)?.value);
 }
 
-export async function getPortalCarrier() {
+export async function getPortalUser() {
   const session = await getPortalSession();
   if (!session) return null;
-  return prisma.carrier.findUnique({ where: { id: session.carrierId } });
+  return prisma.carrierUser.findUnique({ where: { id: session.carrierUserId }, include: { carrier: true } });
+}
+
+export async function getPortalCarrier() {
+  const user = await getPortalUser();
+  return user?.carrier ?? null;
 }
 
 export async function requirePortalSession() {
@@ -22,16 +27,16 @@ export async function requirePortalSession() {
   return session;
 }
 
-export async function authenticateCarrier(email: string, password: string) {
-  const carrier = await prisma.carrier.findUnique({ where: { email } });
-  if (!carrier || !carrier.passwordHash || !verifyPassword(password, carrier.passwordHash)) {
+export async function authenticateCarrierUser(email: string, password: string) {
+  const user = await prisma.carrierUser.findUnique({ where: { email } });
+  if (!user || !verifyPassword(password, user.passwordHash)) {
     return null;
   }
-  return carrier;
+  return user;
 }
 
-export async function createPortalSession(carrierId: string) {
-  const token = createSessionToken(carrierId);
+export async function createPortalSession(carrierUserId: string) {
+  const token = createSessionToken(carrierUserId);
   const store = await cookies();
   store.set(PORTAL_SESSION_COOKIE, token, {
     httpOnly: true,

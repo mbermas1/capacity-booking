@@ -23,15 +23,15 @@ function secret(): string {
   return s;
 }
 
-export function createSessionToken(carrierId: string): string {
+export function createSessionToken(carrierUserId: string): string {
   const payload = Buffer.from(
-    JSON.stringify({ carrierId, exp: Date.now() + SESSION_TTL_SECONDS * 1000 }),
+    JSON.stringify({ carrierUserId, exp: Date.now() + SESSION_TTL_SECONDS * 1000 }),
   ).toString("base64url");
   const sig = createHmac("sha256", secret()).update(payload).digest("base64url");
   return `${payload}.${sig}`;
 }
 
-export function verifySessionToken(token: string | undefined): { carrierId: string } | null {
+export function verifySessionToken(token: string | undefined): { carrierUserId: string } | null {
   if (!token) return null;
   const [payload, sig] = token.split(".");
   if (!payload || !sig) return null;
@@ -43,8 +43,8 @@ export function verifySessionToken(token: string | undefined): { carrierId: stri
 
   try {
     const data = JSON.parse(Buffer.from(payload, "base64url").toString("utf8"));
-    if (typeof data.carrierId !== "string" || Date.now() > data.exp) return null;
-    return { carrierId: data.carrierId };
+    if (typeof data.carrierUserId !== "string" || Date.now() > data.exp) return null;
+    return { carrierUserId: data.carrierUserId };
   } catch {
     return null;
   }
