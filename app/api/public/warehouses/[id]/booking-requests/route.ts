@@ -67,6 +67,7 @@ export async function POST(request: NextRequest, { params }: { params: Promise<{
     contactPhone: isNonEmptyString(body.contactPhone) ? body.contactPhone.trim() : undefined,
     referenceNumber: (body.referenceNumber as string).trim(),
     loadType: body.loadType as LoadType,
+    verifyBaseUrl: request.nextUrl.origin,
   });
 
   if (result.outcome === "dock_not_found") {
@@ -76,5 +77,8 @@ export async function POST(request: NextRequest, { params }: { params: Promise<{
     return NextResponse.json({ error: "This slot is no longer available" }, { status: 409 });
   }
 
-  return NextResponse.json({ id: result.bookingRequestId, status: result.outcome.toUpperCase() }, { status: 201 });
+  return NextResponse.json(
+    { id: result.bookingRequestId, status: "PENDING", awaitingVerification: true },
+    { status: 201 },
+  );
 }

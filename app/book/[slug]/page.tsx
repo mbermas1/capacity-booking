@@ -1,4 +1,5 @@
 import { notFound, redirect } from "next/navigation";
+import { headers } from "next/headers";
 import { prisma } from "@/lib/prisma";
 import { getPublicDockAvailability } from "@/lib/availability";
 import { submitPublicBookingRequest } from "@/lib/booking-requests";
@@ -40,6 +41,10 @@ async function submitRequest(slug: string, warehouseId: string, formData: FormDa
     redirect(`/book/${slug}?${params.toString()}`);
   }
 
+  const requestHeaders = await headers();
+  const host = requestHeaders.get("host") ?? "localhost:3000";
+  const protocol = requestHeaders.get("x-forwarded-proto") ?? (host.startsWith("localhost") ? "http" : "https");
+
   const result = await submitPublicBookingRequest({
     warehouseId,
     dockId,
@@ -50,6 +55,7 @@ async function submitRequest(slug: string, warehouseId: string, formData: FormDa
     contactPhone: contactPhone || undefined,
     referenceNumber,
     loadType: loadType as LoadType,
+    verifyBaseUrl: `${protocol}://${host}`,
   });
 
   if (result.outcome === "dock_not_found" || result.outcome === "unavailable") {
@@ -57,7 +63,7 @@ async function submitRequest(slug: string, warehouseId: string, formData: FormDa
     redirect(`/book/${slug}?${params.toString()}`);
   }
 
-  redirect(`/book/${slug}?submitted=${result.outcome}`);
+  redirect(`/book/${slug}?submitted=verify`);
 }
 
 export default async function PublicBookingPage({
@@ -108,6 +114,11 @@ export default async function PublicBookingPage({
         {submitted === "pending" && (
           <p className="mb-6 rounded-lg bg-green-100 px-3 py-2 text-sm text-green-800 dark:bg-green-950 dark:text-green-300">
             Request submitted — a member of our team will confirm your appointment.
+          </p>
+        )}
+        {submitted === "verify" && (
+          <p className="mb-6 rounded-lg bg-green-100 px-3 py-2 text-sm text-green-800 dark:bg-green-950 dark:text-green-300">
+            Check your email to confirm your request — the link expires in 30 minutes.
           </p>
         )}
 
@@ -180,6 +191,16 @@ export default async function PublicBookingPage({
         {error === "unavailable" && (
           <p className="mt-6 rounded-lg bg-red-100 px-3 py-2 text-sm text-red-800 dark:bg-red-950 dark:text-red-300">
             That slot is no longer available. Check availability again and pick a different time.
+          </p>
+        )}
+        {error === "expired" && (
+          <p className="mt-6 rounded-lg bg-red-100 px-3 py-2 text-sm text-red-800 dark:bg-red-950 dark:text-red-300">
+            This verification link has expired. Please submit a new request.
+          </p>
+        )}
+        {error === "invalid-link" && (
+          <p className="mt-6 rounded-lg bg-red-100 px-3 py-2 text-sm text-red-800 dark:bg-red-950 dark:text-red-300">
+            This verification link is invalid or has already been used.
           </p>
         )}
 

@@ -54,7 +54,10 @@ async function approveRequest(requestId: string) {
       loadType: bookingRequest.loadType,
     });
 
-    await prisma.bookingRequest.update({ where: { id: requestId }, data: { status: "APPROVED" } });
+    await prisma.bookingRequest.update({
+      where: { id: requestId },
+      data: { status: "APPROVED", verifiedAt: bookingRequest.verifiedAt ?? new Date() },
+    });
     params.set("message", "Request approved and booked.");
   } catch (error) {
     let reason = "Internal server error";
@@ -190,6 +193,9 @@ export default async function StaffRequestsPage({
                       </span>
                       {r.reviewNote && (
                         <span className="text-xs text-amber-700 dark:text-amber-400">{r.reviewNote}</span>
+                      )}
+                      {!r.verifiedAt && !r.reviewNote && (
+                        <span className="text-xs text-zinc-500 dark:text-zinc-400">Awaiting email verification</span>
                       )}
                     </div>
                     <span className={`rounded-full px-2 py-0.5 text-xs font-medium ${STATUS_STYLES[r.status]}`}>

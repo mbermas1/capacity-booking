@@ -1,5 +1,7 @@
+import { randomBytes } from "node:crypto";
 import { prisma } from "@/lib/prisma";
 import { getPublicDockAvailability } from "@/lib/availability";
+import { sendVerificationEmail } from "@/lib/email";
 import {
   createBooking,
   DockNotFoundError,
@@ -11,6 +13,8 @@ import {
 } from "@/lib/bookings";
 import type { LoadType } from "@/app/generated/prisma/client";
 
+const VERIFICATION_TTL_MS = 30 * 60 * 1000;
+
 export type SubmitPublicBookingRequestInput = {
   warehouseId: string;
   dockId: string;
@@ -21,13 +25,20 @@ export type SubmitPublicBookingRequestInput = {
   contactPhone?: string;
   referenceNumber: string;
   loadType: LoadType;
+  verifyBaseUrl: string; // e.g. "https://example.com" — used to build the emailed link
 };
 
 export type SubmitPublicBookingRequestResult =
   | { outcome: "dock_not_found" }
   | { outcome: "unavailable" }
-  | { outcome: "approved"; bookingRequestId: string }
-  | { outcome: "pending"; bookingRequestId: string };
+  | { outcome: "awaiting_verification"; bookingRequestId: string };
+
+export type VerifyBookingRequestResult =
+  | { outcome: "not_found" }
+  | { outcome: "expired"; slug: string }
+  | { outcome: "unavailable"; slug: string }
+  | { outcome: "approved"; slug: string }
+  | { outcome: "pending"; slug: string };
 
 function describeCreateBookingError(error: unknown): string {
   if (
@@ -46,17 +57,16 @@ function describeCreateBookingError(error: unknown): string {
 
 /**
  * Shared by the public booking-request API route and the public booking page's
- * Server Action, so the auto-approve/manual-review decision lives in one place.
- * Auto-approve attempts the real createBooking() (the same call staff approval
- * uses) so every rule — tags, commodity, buffer — still applies; a failure falls
- * back to a PENDING request with the reason recorded, never silently dropped.
+ * Server Action. Validates the request and creates it PENDING with a
+ * verification token/email — the auto-approve/manual-review decision is
+ * deferred to verifyBookingRequestEmail, triggered by the emailed link.
  */
 export async function submitPublicBookingRequest(
   input: SubmitPublicBookingRequestInput,
 ): Promise<SubmitPublicBookingRequestResult> {
   const dock = await prisma.dock.findUnique({
     where: { id: input.dockId },
-    select: { warehouseId: true, requiresManualReview: true },
+    select: { warehouseId: true, name: true },
   });
   if (!dock || dock.warehouseId !== input.warehouseId) {
     return { outcome: "dock_not_found" };
@@ -67,48 +77,116 @@ export async function submitPublicBookingRequest(
     return { outcome: "unavailable" };
   }
 
-  const baseData = {
-    warehouseId: input.warehouseId,
-    dockId: input.dockId,
-    startTime: input.startTime,
-    endTime: input.endTime,
-    companyName: input.companyName,
-    contactEmail: input.contactEmail,
-    contactPhone: input.contactPhone,
-    referenceNumber: input.referenceNumber,
-    loadType: input.loadType,
-  };
+  const warehouse = await prisma.warehouse.findUnique({
+    where: { id: input.warehouseId },
+    select: { publicBookingSlug: true },
+  });
+  if (!warehouse) {
+    return { outcome: "dock_not_found" };
+  }
 
-  if (!dock.requiresManualReview) {
+  const verificationToken = randomBytes(16).toString("hex");
+  const verificationExpiresAt = new Date(Date.now() + VERIFICATION_TTL_MS);
+
+  const bookingRequest = await prisma.bookingRequest.create({
+    data: {
+      warehouseId: input.warehouseId,
+      dockId: input.dockId,
+      startTime: input.startTime,
+      endTime: input.endTime,
+      companyName: input.companyName,
+      contactEmail: input.contactEmail,
+      contactPhone: input.contactPhone,
+      referenceNumber: input.referenceNumber,
+      loadType: input.loadType,
+      status: "PENDING",
+      verificationToken,
+      verificationExpiresAt,
+    },
+  });
+
+  const verifyUrl = `${input.verifyBaseUrl}/book/${warehouse.publicBookingSlug}/verify?token=${verificationToken}`;
+  const sent = await sendVerificationEmail(input.contactEmail, verifyUrl, { dockName: dock.name });
+  if (!sent) {
+    await prisma.bookingRequest.update({
+      where: { id: bookingRequest.id },
+      data: { reviewNote: "Verification email failed to send" },
+    });
+  }
+
+  return { outcome: "awaiting_verification", bookingRequestId: bookingRequest.id };
+}
+
+/**
+ * Triggered by the emailed verification link. Only past this point does the
+ * auto-approve-or-fall-back-to-manual-review decision happen — staff can still
+ * approve/reject an unverified request directly at any time (unaffected by this).
+ */
+export async function verifyBookingRequestEmail(token: string): Promise<VerifyBookingRequestResult> {
+  const bookingRequest = await prisma.bookingRequest.findUnique({
+    where: { verificationToken: token },
+    include: { dock: true, warehouse: { select: { publicBookingSlug: true } } },
+  });
+  if (!bookingRequest) {
+    return { outcome: "not_found" };
+  }
+
+  const slug = bookingRequest.warehouse.publicBookingSlug;
+
+  if (bookingRequest.verifiedAt) {
+    return bookingRequest.status === "APPROVED" ? { outcome: "approved", slug } : { outcome: "pending", slug };
+  }
+
+  if (bookingRequest.verificationExpiresAt && bookingRequest.verificationExpiresAt < new Date()) {
+    return { outcome: "expired", slug };
+  }
+
+  await prisma.bookingRequest.update({ where: { id: bookingRequest.id }, data: { verifiedAt: new Date() } });
+
+  const availability = await getPublicDockAvailability(
+    bookingRequest.dockId,
+    bookingRequest.startTime,
+    bookingRequest.endTime,
+  );
+  if (!availability?.available) {
+    await prisma.bookingRequest.update({
+      where: { id: bookingRequest.id },
+      data: { status: "REJECTED", reviewNote: "Slot no longer available by the time email was verified" },
+    });
+    return { outcome: "unavailable", slug };
+  }
+
+  if (!bookingRequest.dock.requiresManualReview) {
     try {
       const carrier = await prisma.carrier.upsert({
-        where: { name: input.companyName },
-        create: { name: input.companyName, email: input.contactEmail },
+        where: { name: bookingRequest.companyName },
+        create: { name: bookingRequest.companyName, email: bookingRequest.contactEmail },
         update: {},
       });
 
       await createBooking({
-        dockId: input.dockId,
-        startTime: input.startTime,
-        endTime: input.endTime,
+        dockId: bookingRequest.dockId,
+        startTime: bookingRequest.startTime,
+        endTime: bookingRequest.endTime,
         carrierId: carrier.id,
-        referenceNumber: input.referenceNumber,
-        loadType: input.loadType,
+        referenceNumber: bookingRequest.referenceNumber,
+        loadType: bookingRequest.loadType,
       });
 
-      const bookingRequest = await prisma.bookingRequest.create({
-        data: { ...baseData, status: "APPROVED", reviewNote: "Auto-approved" },
+      await prisma.bookingRequest.update({
+        where: { id: bookingRequest.id },
+        data: { status: "APPROVED", reviewNote: "Auto-approved" },
       });
-      return { outcome: "approved", bookingRequestId: bookingRequest.id };
+      return { outcome: "approved", slug };
     } catch (error) {
       const reason = describeCreateBookingError(error);
-      const bookingRequest = await prisma.bookingRequest.create({
-        data: { ...baseData, status: "PENDING", reviewNote: `Auto-approve failed: ${reason}` },
+      await prisma.bookingRequest.update({
+        where: { id: bookingRequest.id },
+        data: { reviewNote: `Auto-approve failed: ${reason}` },
       });
-      return { outcome: "pending", bookingRequestId: bookingRequest.id };
+      return { outcome: "pending", slug };
     }
   }
 
-  const bookingRequest = await prisma.bookingRequest.create({ data: { ...baseData, status: "PENDING" } });
-  return { outcome: "pending", bookingRequestId: bookingRequest.id };
+  return { outcome: "pending", slug };
 }

@@ -134,22 +134,25 @@ enum BookingRequestStatus {
 // becomes a Booking automatically — staff approve/reject, and approval runs
 // the same createBooking() constraint engine as every other booking path.
 model BookingRequest {
-  id              String               @id @default(cuid())
-  warehouse       Warehouse            @relation(fields: [warehouseId], references: [id])
-  warehouseId     String
-  dock            Dock                 @relation(fields: [dockId], references: [id])
-  dockId          String
-  startTime       DateTime
-  endTime         DateTime
-  companyName     String
-  contactEmail    String
-  contactPhone    String?
-  referenceNumber String
-  loadType        LoadType
-  status          BookingRequestStatus @default(PENDING)
-  reviewNote      String?
-  createdAt       DateTime             @default(now())
-  updatedAt       DateTime             @updatedAt
+  id                    String               @id @default(cuid())
+  warehouse             Warehouse            @relation(fields: [warehouseId], references: [id])
+  warehouseId           String
+  dock                  Dock                 @relation(fields: [dockId], references: [id])
+  dockId                String
+  startTime             DateTime
+  endTime               DateTime
+  companyName           String
+  contactEmail          String
+  contactPhone          String?
+  referenceNumber       String
+  loadType              LoadType
+  status                BookingRequestStatus @default(PENDING)
+  reviewNote            String?
+  verificationToken     String?              @unique
+  verificationExpiresAt DateTime?
+  verifiedAt            DateTime?
+  createdAt             DateTime             @default(now())
+  updatedAt             DateTime             @updatedAt
 
   @@index([warehouseId, status])
 }
