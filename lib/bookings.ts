@@ -6,6 +6,7 @@ import {
   findUnacceptedCommodities,
   requiredMinDurationMinutes,
 } from "@/lib/booking-constraints";
+import { sendBookingConfirmationEmail } from "@/lib/email";
 import { BookingPriority } from "@/app/generated/prisma/client";
 import type {
   BookingStatus,
@@ -168,4 +169,25 @@ export async function createBooking(input: CreateBookingInput) {
  */
 export async function createBookingWithTx(tx: Prisma.TransactionClient, input: CreateBookingInput) {
   return runCreateBooking(tx, input);
+}
+
+/**
+ * Deliberately NOT called from within createBooking/runCreateBooking — that
+ * would also fire for public-request-flow bookings (auto-approve and staff
+ * approval both call createBooking too), which are explicitly out of scope
+ * here. Call sites opt in individually after a successful createBooking().
+ */
+export async function notifyBookingConfirmed(bookingId: string): Promise<void> {
+  const booking = await prisma.booking.findUnique({
+    where: { id: bookingId },
+    include: { dock: { select: { name: true } }, carrier: { select: { email: true } } },
+  });
+  if (!booking?.carrier.email) return;
+
+  await sendBookingConfirmationEmail(booking.carrier.email, {
+    dockName: booking.dock.name,
+    startTime: booking.startTime,
+    endTime: booking.endTime,
+    referenceNumber: booking.referenceNumber,
+  });
 }

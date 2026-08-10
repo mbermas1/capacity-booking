@@ -7,6 +7,7 @@ import {
   UnacceptedCommodityError,
   MinimumDurationError,
   createBooking,
+  notifyBookingConfirmed,
 } from "@/lib/bookings";
 import { CARRIER_NAME_INCLUDE, withCarrierName } from "@/lib/booking-response";
 import { prisma } from "@/lib/prisma";
@@ -170,6 +171,8 @@ export async function POST(request: NextRequest) {
       shipmentVolume,
       commodityTagIds,
     });
+
+    await notifyBookingConfirmed(booking.id);
 
     return NextResponse.json(withCarrierName(booking), { status: 201 });
   } catch (error) {

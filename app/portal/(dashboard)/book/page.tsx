@@ -10,6 +10,7 @@ import {
   MinimumDurationError,
   LeadTimeError,
   createBooking,
+  notifyBookingConfirmed,
 } from "@/lib/bookings";
 import { checkLeadTime } from "@/lib/booking-constraints";
 import { formatTime } from "@/lib/booking-display";
@@ -61,7 +62,7 @@ async function bookSlot(formData: FormData) {
       throw new LeadTimeError(dock.minLeadTimeMinutes as number);
     }
 
-    await createBooking({
+    const booking = await createBooking({
       dockId,
       startTime,
       endTime,
@@ -72,6 +73,8 @@ async function bookSlot(formData: FormData) {
       shipmentVolume,
       commodityTagIds: commodityTagId ? [commodityTagId] : undefined,
     });
+
+    await notifyBookingConfirmed(booking.id);
   } catch (error) {
     if (error instanceof BookingOverlapError) {
       params.set("error", "overlap");

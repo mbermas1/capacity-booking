@@ -8,6 +8,7 @@ import {
   MinimumDurationError,
   LeadTimeError,
   createBooking,
+  notifyBookingConfirmed,
 } from "@/lib/bookings";
 import { checkLeadTime } from "@/lib/booking-constraints";
 import { CARRIER_NAME_INCLUDE, withCarrierName } from "@/lib/booking-response";
@@ -169,6 +170,8 @@ export async function POST(request: NextRequest) {
       shipmentVolume,
       commodityTagIds,
     });
+
+    await notifyBookingConfirmed(booking.id);
 
     return NextResponse.json(withCarrierName(booking), { status: 201 });
   } catch (error) {
