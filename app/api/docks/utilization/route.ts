@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
+import { computeUtilization } from "@/lib/utilization";
 
 function isNonEmptyString(value: unknown): value is string {
   return typeof value === "string" && value.trim().length > 0;
@@ -59,49 +60,17 @@ export async function GET(request: NextRequest) {
     return NextResponse.json({ error: "Validation failed", details: errors }, { status: 400 });
   }
 
-  const docks = await prisma.dock.findMany({
-    where: dockId !== null ? { id: dockId } : undefined,
-    orderBy: { name: "asc" },
-  });
-
-  if (dockId !== null && docks.length === 0) {
-    return NextResponse.json({ error: "Dock not found" }, { status: 404 });
+  if (dockId !== null) {
+    const dock = await prisma.dock.findUnique({ where: { id: dockId } });
+    if (!dock) {
+      return NextResponse.json({ error: "Dock not found" }, { status: 404 });
+    }
   }
 
   const rangeStartDate = rangeStart as Date;
   const rangeEndDate = rangeEnd as Date;
-  const rangeMs = rangeEndDate.getTime() - rangeStartDate.getTime();
 
-  const bookings = await prisma.booking.findMany({
-    where: {
-      ...(dockId !== null ? { dockId } : {}),
-      startTime: { lt: rangeEndDate },
-      endTime: { gt: rangeStartDate },
-    },
-  });
-
-  const bookedMsByDock = new Map<string, number>();
-  const bookingCountByDock = new Map<string, number>();
-  for (const booking of bookings) {
-    const overlapStart = booking.startTime > rangeStartDate ? booking.startTime : rangeStartDate;
-    const overlapEnd = booking.endTime < rangeEndDate ? booking.endTime : rangeEndDate;
-    const durationMs = overlapEnd.getTime() - overlapStart.getTime();
-
-    bookedMsByDock.set(booking.dockId, (bookedMsByDock.get(booking.dockId) ?? 0) + durationMs);
-    bookingCountByDock.set(booking.dockId, (bookingCountByDock.get(booking.dockId) ?? 0) + 1);
-  }
-
-  const stats = docks.map((dock) => {
-    const bookedMs = bookedMsByDock.get(dock.id) ?? 0;
-    return {
-      dockId: dock.id,
-      dockName: dock.name,
-      bookingCount: bookingCountByDock.get(dock.id) ?? 0,
-      bookedMs,
-      totalMs: rangeMs,
-      utilization: rangeMs > 0 ? bookedMs / rangeMs : 0,
-    };
-  });
+  const stats = await computeUtilization(rangeStartDate, rangeEndDate, { dockId: dockId ?? undefined });
 
   return NextResponse.json({
     startTime: rangeStartDate.toISOString(),

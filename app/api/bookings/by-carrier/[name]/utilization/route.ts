@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
+import { computeUtilization } from "@/lib/utilization";
 
 function isNonEmptyString(value: unknown): value is string {
   return typeof value === "string" && value.trim().length > 0;
@@ -69,9 +70,8 @@ export async function GET(
     return NextResponse.json({ error: "Validation failed", details: errors }, { status: 400 });
   }
 
-  let scopedDock = null;
   if (dockId !== null) {
-    scopedDock = await prisma.dock.findUnique({ where: { id: dockId } });
+    const scopedDock = await prisma.dock.findUnique({ where: { id: dockId } });
     if (!scopedDock) {
       return NextResponse.json({ error: "Dock not found" }, { status: 404 });
     }
@@ -79,47 +79,11 @@ export async function GET(
 
   const rangeStartDate = rangeStart as Date;
   const rangeEndDate = rangeEnd as Date;
-  const rangeMs = rangeEndDate.getTime() - rangeStartDate.getTime();
 
-  const bookings = await prisma.booking.findMany({
-    where: {
-      carrier: { name: carrierName },
-      ...(dockId !== null ? { dockId } : {}),
-      startTime: { lt: rangeEndDate },
-      endTime: { gt: rangeStartDate },
-    },
+  const stats = await computeUtilization(rangeStartDate, rangeEndDate, {
+    dockId: dockId ?? undefined,
+    carrierName,
   });
-
-  const bookedMsByDock = new Map<string, number>();
-  const bookingCountByDock = new Map<string, number>();
-  for (const booking of bookings) {
-    const overlapStart = booking.startTime > rangeStartDate ? booking.startTime : rangeStartDate;
-    const overlapEnd = booking.endTime < rangeEndDate ? booking.endTime : rangeEndDate;
-    const durationMs = overlapEnd.getTime() - overlapStart.getTime();
-
-    bookedMsByDock.set(booking.dockId, (bookedMsByDock.get(booking.dockId) ?? 0) + durationMs);
-    bookingCountByDock.set(booking.dockId, (bookingCountByDock.get(booking.dockId) ?? 0) + 1);
-  }
-
-  const toStats = (id: string, dockName: string) => ({
-    dockId: id,
-    dockName,
-    bookingCount: bookingCountByDock.get(id) ?? 0,
-    bookedMs: bookedMsByDock.get(id) ?? 0,
-    totalMs: rangeMs,
-    utilization: rangeMs > 0 ? (bookedMsByDock.get(id) ?? 0) / rangeMs : 0,
-  });
-
-  let stats;
-  if (dockId !== null) {
-    stats = [toStats(dockId, (scopedDock as { name: string }).name)];
-  } else {
-    const docks = await prisma.dock.findMany({
-      where: { id: { in: [...bookedMsByDock.keys()] } },
-      orderBy: { name: "asc" },
-    });
-    stats = docks.map((dock) => toStats(dock.id, dock.name));
-  }
 
   return NextResponse.json({
     carrierName,
