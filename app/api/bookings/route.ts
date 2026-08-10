@@ -8,6 +8,7 @@ import {
   MinimumDurationError,
   createBooking,
   notifyBookingConfirmed,
+  detectNoShowMany,
 } from "@/lib/bookings";
 import { CARRIER_NAME_INCLUDE, withCarrierName } from "@/lib/booking-response";
 import { prisma } from "@/lib/prisma";
@@ -44,7 +45,7 @@ export async function GET(request: NextRequest) {
     }
   }
 
-  const bookings = await prisma.booking.findMany({
+  const rawBookings = await prisma.booking.findMany({
     where: {
       ...(dockId !== null ? { dockId } : {}),
       ...(carrierName !== null ? { carrier: { name: { contains: carrierName } } } : {}),
@@ -53,6 +54,7 @@ export async function GET(request: NextRequest) {
     include: CARRIER_NAME_INCLUDE,
     orderBy: { startTime: "asc" },
   });
+  const bookings = await detectNoShowMany(rawBookings);
 
   return NextResponse.json(bookings.map(withCarrierName));
 }

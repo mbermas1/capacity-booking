@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { CARRIER_NAME_INCLUDE, withCarrierName } from "@/lib/booking-response";
-import { notifyBookingCancelled } from "@/lib/bookings";
+import { notifyBookingCancelled, detectNoShow } from "@/lib/bookings";
 import { prisma } from "@/lib/prisma";
 import { BookingStatus, Prisma } from "@/app/generated/prisma/client";
 
@@ -14,10 +14,11 @@ export async function GET(
 ) {
   const { id } = await params;
 
-  const booking = await prisma.booking.findUnique({ where: { id }, include: CARRIER_NAME_INCLUDE });
-  if (!booking) {
+  const rawBooking = await prisma.booking.findUnique({ where: { id }, include: CARRIER_NAME_INCLUDE });
+  if (!rawBooking) {
     return NextResponse.json({ error: "Booking not found" }, { status: 404 });
   }
+  const booking = await detectNoShow(rawBooking);
 
   return NextResponse.json(withCarrierName(booking));
 }

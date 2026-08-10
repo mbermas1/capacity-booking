@@ -10,6 +10,7 @@ import {
   sendBookingConfirmationEmail,
   sendBookingCancellationEmail,
   sendBookingRescheduledEmail,
+  sendBookingNoShowEmail,
 } from "@/lib/email";
 import { BookingPriority } from "@/app/generated/prisma/client";
 import type {
@@ -326,4 +327,55 @@ export async function notifyBookingRescheduled(
     newEndTime: booking.endTime,
     referenceNumber: booking.referenceNumber,
   });
+}
+
+const NO_SHOW_GRACE_MS = 60 * 60 * 1000; // grace period after endTime before a still-SCHEDULED booking is flagged
+
+type NoShowCandidate = { id: string; status: BookingStatus; endTime: Date };
+
+/**
+ * Looked up by id rather than passed data, like notifyBookingConfirmed — the
+ * row still exists post-update. Kept private: unlike the other notifyBooking*
+ * functions, it has exactly one caller (detectNoShow), not several call sites
+ * opting in independently.
+ */
+async function notifyBookingNoShow(bookingId: string): Promise<void> {
+  const booking = await prisma.booking.findUnique({
+    where: { id: bookingId },
+    include: { dock: { select: { name: true } }, carrier: { select: { email: true } } },
+  });
+  if (!booking?.carrier.email) return;
+
+  await sendBookingNoShowEmail(booking.carrier.email, {
+    dockName: booking.dock.name,
+    startTime: booking.startTime,
+    endTime: booking.endTime,
+    referenceNumber: booking.referenceNumber,
+  });
+}
+
+/**
+ * Lazy on-read no-show detection: called by every primary booking read path.
+ * If a booking is still SCHEDULED long enough after its window closed, flips
+ * it to NO_SHOW and notifies the carrier — both as one step, since (unlike
+ * confirm/cancel/reschedule) there's no caller that legitimately wants the
+ * flip without the notification. Never throws: a transient failure here must
+ * not break the read it's piggybacking on.
+ */
+export async function detectNoShow<T extends NoShowCandidate>(booking: T): Promise<T> {
+  if (booking.status !== "SCHEDULED") return booking;
+  if (booking.endTime.getTime() + NO_SHOW_GRACE_MS >= Date.now()) return booking;
+
+  try {
+    await prisma.booking.update({ where: { id: booking.id }, data: { status: "NO_SHOW" } });
+    await notifyBookingNoShow(booking.id);
+    return { ...booking, status: "NO_SHOW" as BookingStatus };
+  } catch (error) {
+    console.error("No-show detection failed for booking", booking.id, error);
+    return booking;
+  }
+}
+
+export async function detectNoShowMany<T extends NoShowCandidate>(bookings: T[]): Promise<T[]> {
+  return Promise.all(bookings.map((b) => detectNoShow(b)));
 }

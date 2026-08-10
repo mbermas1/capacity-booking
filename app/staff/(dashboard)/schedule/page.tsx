@@ -1,6 +1,7 @@
 import Link from "next/link";
 import { prisma } from "@/lib/prisma";
 import { getStaffMember } from "@/lib/staff-session";
+import { detectNoShowMany } from "@/lib/bookings";
 import { STATUS_STYLES, LOAD_TYPE_STYLES, PRIORITY_STYLES, formatTime } from "@/lib/booking-display";
 
 function toISODate(date: Date): string {
@@ -32,7 +33,7 @@ export default async function StaffSchedulePage({
   const prevDate = toISODate(new Date(dayStart.getTime() - 24 * 60 * 60 * 1000));
   const nextDate = toISODate(new Date(dayStart.getTime() + 24 * 60 * 60 * 1000));
 
-  const docks = await prisma.dock.findMany({
+  const rawDocks = await prisma.dock.findMany({
     where: { warehouseId: staff.warehouseId },
     orderBy: { name: "asc" },
     include: {
@@ -49,6 +50,10 @@ export default async function StaffSchedulePage({
       },
     },
   });
+
+  const docks = await Promise.all(
+    rawDocks.map(async (dock) => ({ ...dock, bookings: await detectNoShowMany(dock.bookings) })),
+  );
 
   const totalBookings = docks.reduce((sum, dock) => sum + dock.bookings.length, 0);
 

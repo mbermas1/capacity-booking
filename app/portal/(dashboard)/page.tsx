@@ -2,7 +2,7 @@ import Link from "next/link";
 import { revalidatePath } from "next/cache";
 import { prisma } from "@/lib/prisma";
 import { getPortalSession } from "@/lib/portal-session";
-import { notifyBookingCancelled } from "@/lib/bookings";
+import { notifyBookingCancelled, detectNoShowMany } from "@/lib/bookings";
 import { STATUS_STYLES, LOAD_TYPE_STYLES, formatTime } from "@/lib/booking-display";
 
 async function cancelBooking(formData: FormData) {
@@ -38,11 +38,12 @@ export default async function PortalDashboardPage() {
   const session = await getPortalSession();
   if (!session) return null;
 
-  const bookings = await prisma.booking.findMany({
+  const rawBookings = await prisma.booking.findMany({
     where: { carrierId: session.carrierId },
     include: { dock: true },
     orderBy: { startTime: "desc" },
   });
+  const bookings = await detectNoShowMany(rawBookings);
 
   const now = new Date();
   const upcoming = bookings.filter((b) => b.endTime >= now).sort((a, b) => a.startTime.getTime() - b.startTime.getTime());

@@ -9,6 +9,7 @@ import {
   LeadTimeError,
   createBooking,
   notifyBookingConfirmed,
+  detectNoShowMany,
 } from "@/lib/bookings";
 import { checkLeadTime } from "@/lib/booking-constraints";
 import { CARRIER_NAME_INCLUDE, withCarrierName } from "@/lib/booking-response";
@@ -54,7 +55,7 @@ export async function GET(request: NextRequest) {
     return NextResponse.json({ error: "Validation failed", details: errors }, { status: 400 });
   }
 
-  const [total, bookings] = await Promise.all([
+  const [total, rawBookings] = await Promise.all([
     prisma.booking.count({ where: { carrierId: session.carrierId } }),
     prisma.booking.findMany({
       where: { carrierId: session.carrierId },
@@ -64,6 +65,7 @@ export async function GET(request: NextRequest) {
       take: limit,
     }),
   ]);
+  const bookings = await detectNoShowMany(rawBookings);
 
   return NextResponse.json({ total, limit, offset, bookings: bookings.map(withCarrierName) });
 }

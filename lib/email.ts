@@ -84,3 +84,14 @@ export async function sendBookingRescheduledEmail(
     `<p>Your dock appointment has been rescheduled.</p><ul><li>Dock: ${context.dockName}</li><li>Previous time: ${context.previousStartTime.toISOString()}–${context.previousEndTime.toISOString()} UTC</li><li>New time: ${context.newStartTime.toISOString()}–${context.newEndTime.toISOString()} UTC</li><li>Reference: ${context.referenceNumber}</li></ul>`,
   );
 }
+
+export async function sendBookingNoShowEmail(
+  to: string,
+  context: { dockName: string; startTime: Date; endTime: Date; referenceNumber: string },
+): Promise<boolean> {
+  return sendEmail(
+    to,
+    `Marked as a no-show — ${context.dockName}`,
+    `<p>Your dock appointment was marked as a no-show — no check-in was recorded for the scheduled window.</p><ul><li>Dock: ${context.dockName}</li><li>Time: ${context.startTime.toISOString()}–${context.endTime.toISOString()} UTC</li><li>Reference: ${context.referenceNumber}</li></ul><p>If this is a mistake, contact the warehouse to have it corrected.</p>`,
+  );
+}
