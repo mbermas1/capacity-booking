@@ -13,15 +13,16 @@ datasource db {
 }
 
 model Warehouse {
-  id           String        @id @default(cuid())
-  name         String
-  location     String
-  docks        Dock[]
-  staff        Staff[]
-  laborShifts  LaborShift[]
-  yardCapacity YardCapacity?
-  createdAt    DateTime      @default(now())
-  updatedAt    DateTime      @updatedAt
+  id              String           @id @default(cuid())
+  name            String
+  location        String
+  docks           Dock[]
+  staff           Staff[]
+  laborShifts     LaborShift[]
+  yardCapacity    YardCapacity?
+  bookingRequests BookingRequest[]
+  createdAt       DateTime         @default(now())
+  updatedAt       DateTime         @updatedAt
 }
 
 model Dock {
@@ -38,6 +39,7 @@ model Dock {
   operatingHours            DockOperatingHours[]
   tags                      DockTag[]
   bookings                  Booking[]
+  bookingRequests           BookingRequest[]
   createdAt                 DateTime             @default(now())
   updatedAt                 DateTime             @updatedAt
 
@@ -118,6 +120,36 @@ enum TagCategory {
   EQUIPMENT
   COMMODITY
   CARRIER_REQUIREMENT
+}
+
+enum BookingRequestStatus {
+  PENDING
+  APPROVED
+  REJECTED
+}
+
+// Submitted through the public per-warehouse booking link (no login). Never
+// becomes a Booking automatically — staff approve/reject, and approval runs
+// the same createBooking() constraint engine as every other booking path.
+model BookingRequest {
+  id              String               @id @default(cuid())
+  warehouse       Warehouse            @relation(fields: [warehouseId], references: [id])
+  warehouseId     String
+  dock            Dock                 @relation(fields: [dockId], references: [id])
+  dockId          String
+  startTime       DateTime
+  endTime         DateTime
+  companyName     String
+  contactEmail    String
+  contactPhone    String?
+  referenceNumber String
+  loadType        LoadType
+  status          BookingRequestStatus @default(PENDING)
+  reviewNote      String?
+  createdAt       DateTime             @default(now())
+  updatedAt       DateTime             @updatedAt
+
+  @@index([warehouseId, status])
 }
 
 model Tag {

@@ -45,6 +45,9 @@ export default async function StaffDashboardLayout({ children }: { children: Rea
             <Link href="/staff/schedule" className="hover:text-black dark:hover:text-zinc-50">
               Schedule
             </Link>
+            <Link href="/staff/requests" className="hover:text-black dark:hover:text-zinc-50">
+              Requests
+            </Link>
             <Link href="/staff/tags" className="hover:text-black dark:hover:text-zinc-50">
               Tags
             </Link>
