@@ -57,7 +57,7 @@ async function bookSlot(formData: FormData) {
 
   try {
     const dock = await prisma.dock.findUnique({ where: { id: dockId }, select: { minLeadTimeMinutes: true } });
-    if (dock && checkLeadTime(dock.minLeadTimeMinutes, startTime, new Date())) {
+    if (priority !== BookingPriority.HIGH && dock && checkLeadTime(dock.minLeadTimeMinutes, startTime, new Date())) {
       throw new LeadTimeError(dock.minLeadTimeMinutes as number);
     }
 

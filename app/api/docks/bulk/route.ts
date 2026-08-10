@@ -9,6 +9,7 @@ type BulkDockInput = {
   capacity?: unknown;
   minLeadTimeMinutes?: unknown;
   bufferMinutes?: unknown;
+  reservedHighPrioritySlots?: unknown;
 };
 
 function isNonEmptyString(value: unknown): value is string {
@@ -65,6 +66,9 @@ export async function POST(request: NextRequest) {
     if (item?.bufferMinutes !== undefined && !isNonNegativeInteger(item.bufferMinutes)) {
       errors.push(`docks[${index}].bufferMinutes must be a non-negative integer if provided`);
     }
+    if (item?.reservedHighPrioritySlots !== undefined && !isNonNegativeInteger(item.reservedHighPrioritySlots)) {
+      errors.push(`docks[${index}].reservedHighPrioritySlots must be a non-negative integer if provided`);
+    }
   });
 
   if (errors.length > 0) {
@@ -96,6 +100,9 @@ export async function POST(request: NextRequest) {
             ...(item.capacity !== undefined ? { capacity: item.capacity as number } : {}),
             ...(item.minLeadTimeMinutes !== undefined ? { minLeadTimeMinutes: item.minLeadTimeMinutes as number } : {}),
             ...(item.bufferMinutes !== undefined ? { bufferMinutes: item.bufferMinutes as number } : {}),
+            ...(item.reservedHighPrioritySlots !== undefined
+              ? { reservedHighPrioritySlots: item.reservedHighPrioritySlots as number }
+              : {}),
           },
         }),
       );

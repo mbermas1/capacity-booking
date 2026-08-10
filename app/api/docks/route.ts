@@ -31,6 +31,7 @@ type CreateDockBody = {
   capacity?: unknown;
   minLeadTimeMinutes?: unknown;
   bufferMinutes?: unknown;
+  reservedHighPrioritySlots?: unknown;
 };
 
 function isPositiveInteger(value: unknown): value is number {
@@ -67,6 +68,9 @@ export async function POST(request: NextRequest) {
   if (body.bufferMinutes !== undefined && !isNonNegativeInteger(body.bufferMinutes)) {
     errors.push("bufferMinutes must be a non-negative integer if provided");
   }
+  if (body.reservedHighPrioritySlots !== undefined && !isNonNegativeInteger(body.reservedHighPrioritySlots)) {
+    errors.push("reservedHighPrioritySlots must be a non-negative integer if provided");
+  }
 
   if (errors.length > 0) {
     return NextResponse.json({ error: "Validation failed", details: errors }, { status: 400 });
@@ -82,6 +86,9 @@ export async function POST(request: NextRequest) {
         ...(body.capacity !== undefined ? { capacity: body.capacity as number } : {}),
         ...(body.minLeadTimeMinutes !== undefined ? { minLeadTimeMinutes: body.minLeadTimeMinutes as number } : {}),
         ...(body.bufferMinutes !== undefined ? { bufferMinutes: body.bufferMinutes as number } : {}),
+        ...(body.reservedHighPrioritySlots !== undefined
+          ? { reservedHighPrioritySlots: body.reservedHighPrioritySlots as number }
+          : {}),
       },
     });
 

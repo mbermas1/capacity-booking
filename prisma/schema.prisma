@@ -25,20 +25,21 @@ model Warehouse {
 }
 
 model Dock {
-  id                 String               @id @default(cuid())
-  name               String
-  location           String
-  equipmentType      String
-  capacity           Int                  @default(1) // max simultaneous bookings
-  minLeadTimeMinutes Int? // null = no lead time requirement (portal bookings only)
-  bufferMinutes      Int? // null = no buffer requirement, gap enforced before/after each booking
-  warehouse          Warehouse            @relation(fields: [warehouseId], references: [id])
-  warehouseId        String
-  operatingHours     DockOperatingHours[]
-  tags               DockTag[]
-  bookings           Booking[]
-  createdAt          DateTime             @default(now())
-  updatedAt          DateTime             @updatedAt
+  id                        String               @id @default(cuid())
+  name                      String
+  location                  String
+  equipmentType             String
+  capacity                  Int                  @default(1) // max simultaneous bookings
+  minLeadTimeMinutes        Int? // null = no lead time requirement (portal bookings only)
+  bufferMinutes             Int? // null = no buffer requirement, gap enforced before/after each booking
+  reservedHighPrioritySlots Int? // null/0 = no reservation; slots only HIGH-priority bookings can use
+  warehouse                 Warehouse            @relation(fields: [warehouseId], references: [id])
+  warehouseId               String
+  operatingHours            DockOperatingHours[]
+  tags                      DockTag[]
+  bookings                  Booking[]
+  createdAt                 DateTime             @default(now())
+  updatedAt                 DateTime             @updatedAt
 
   @@index([warehouseId])
 }

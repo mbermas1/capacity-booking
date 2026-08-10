@@ -6,9 +6,9 @@ import {
   findUnacceptedCommodities,
   requiredMinDurationMinutes,
 } from "@/lib/booking-constraints";
+import { BookingPriority } from "@/app/generated/prisma/client";
 import type {
   BookingStatus,
-  BookingPriority,
   LoadType,
   Prisma,
 } from "@/app/generated/prisma/client";
@@ -131,7 +131,12 @@ async function runCreateBooking(tx: Prisma.TransactionClient, input: CreateBooki
     },
   });
 
-  if (overlappingCount >= dock.capacity) {
+  const effectivePriority = input.priority ?? BookingPriority.STANDARD;
+  const reservedForHigh = dock.reservedHighPrioritySlots ?? 0;
+  const capacityLimit =
+    effectivePriority === BookingPriority.HIGH ? dock.capacity : Math.max(0, dock.capacity - reservedForHigh);
+
+  if (overlappingCount >= capacityLimit) {
     throw new BookingOverlapError();
   }
 

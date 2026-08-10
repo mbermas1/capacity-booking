@@ -154,7 +154,7 @@ export async function POST(request: NextRequest) {
       where: { id: body.dockId as string },
       select: { minLeadTimeMinutes: true },
     });
-    if (dock && checkLeadTime(dock.minLeadTimeMinutes, startTime as Date, new Date())) {
+    if (priority !== BookingPriority.HIGH && dock && checkLeadTime(dock.minLeadTimeMinutes, startTime as Date, new Date())) {
       throw new LeadTimeError(dock.minLeadTimeMinutes as number);
     }
 

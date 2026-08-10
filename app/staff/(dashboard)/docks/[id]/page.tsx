@@ -29,12 +29,13 @@ async function updateDockDetails(dockId: string, formData: FormData) {
   const capacity = Number.isInteger(Number(capacityRaw)) && Number(capacityRaw) >= 1 ? Number(capacityRaw) : 1;
   const minLeadTimeMinutes = parseOptionalNonNegativeInt(String(formData.get("minLeadTimeMinutes") ?? ""));
   const bufferMinutes = parseOptionalNonNegativeInt(String(formData.get("bufferMinutes") ?? ""));
+  const reservedHighPrioritySlots = parseOptionalNonNegativeInt(String(formData.get("reservedHighPrioritySlots") ?? ""));
 
   if (!name || !location || !equipmentType) return;
 
   await prisma.dock.update({
     where: { id: dockId },
-    data: { name, location, equipmentType, capacity, minLeadTimeMinutes, bufferMinutes },
+    data: { name, location, equipmentType, capacity, minLeadTimeMinutes, bufferMinutes, reservedHighPrioritySlots },
   });
   revalidatePath(`/staff/docks/${dockId}`);
 }
@@ -198,6 +199,19 @@ export default async function StaffDockDetailPage({ params }: { params: Promise<
               type="number"
               min="0"
               defaultValue={dock.bufferMinutes ?? ""}
+              className="h-10 w-24 rounded-lg border border-black/[.08] bg-white px-3 text-sm text-black dark:border-white/[.145] dark:bg-black dark:text-zinc-50"
+            />
+          </div>
+          <div className="flex flex-col gap-1">
+            <label htmlFor="reservedHighPrioritySlots" className="text-sm font-medium text-zinc-700 dark:text-zinc-300">
+              Reserved for High Priority (slots, optional)
+            </label>
+            <input
+              id="reservedHighPrioritySlots"
+              name="reservedHighPrioritySlots"
+              type="number"
+              min="0"
+              defaultValue={dock.reservedHighPrioritySlots ?? ""}
               className="h-10 w-24 rounded-lg border border-black/[.08] bg-white px-3 text-sm text-black dark:border-white/[.145] dark:bg-black dark:text-zinc-50"
             />
           </div>
