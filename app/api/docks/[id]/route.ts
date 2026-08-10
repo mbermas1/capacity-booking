@@ -11,6 +11,7 @@ type UpdateDockBody = {
   minLeadTimeMinutes?: unknown;
   bufferMinutes?: unknown;
   reservedHighPrioritySlots?: unknown;
+  requiresManualReview?: unknown;
 };
 
 function isNonEmptyString(value: unknown): value is string {
@@ -65,6 +66,7 @@ export async function PATCH(
     minLeadTimeMinutes?: number | null;
     bufferMinutes?: number | null;
     reservedHighPrioritySlots?: number | null;
+    requiresManualReview?: boolean;
   } = {};
 
   if (body.name !== undefined) {
@@ -111,9 +113,14 @@ export async function PATCH(
     } else data.reservedHighPrioritySlots = body.reservedHighPrioritySlots;
   }
 
+  if (body.requiresManualReview !== undefined) {
+    if (typeof body.requiresManualReview !== "boolean") errors.push("requiresManualReview must be a boolean");
+    else data.requiresManualReview = body.requiresManualReview;
+  }
+
   if (Object.keys(data).length === 0 && errors.length === 0) {
     errors.push(
-      "At least one of name, location, equipmentType, warehouseId, capacity, minLeadTimeMinutes, bufferMinutes, reservedHighPrioritySlots must be provided",
+      "At least one of name, location, equipmentType, warehouseId, capacity, minLeadTimeMinutes, bufferMinutes, reservedHighPrioritySlots, requiresManualReview must be provided",
     );
   }
 

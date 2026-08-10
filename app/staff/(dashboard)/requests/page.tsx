@@ -188,6 +188,9 @@ export default async function StaffRequestsPage({
                         {r.contactEmail}
                         {r.contactPhone ? ` · ${r.contactPhone}` : ""} · {r.referenceNumber} · {r.loadType}
                       </span>
+                      {r.reviewNote && (
+                        <span className="text-xs text-amber-700 dark:text-amber-400">{r.reviewNote}</span>
+                      )}
                     </div>
                     <span className={`rounded-full px-2 py-0.5 text-xs font-medium ${STATUS_STYLES[r.status]}`}>
                       {r.status}
@@ -239,6 +242,9 @@ export default async function StaffRequestsPage({
                   <span className="font-mono text-xs text-zinc-500 dark:text-zinc-400">
                     {formatDate(r.startTime)} · {formatTime(r.startTime)}–{formatTime(r.endTime)}
                   </span>
+                  {r.reviewNote && (
+                    <span className="text-xs text-zinc-500 dark:text-zinc-400">{r.reviewNote}</span>
+                  )}
                 </div>
                 <span className={`rounded-full px-2 py-0.5 text-xs font-medium ${STATUS_STYLES[r.status]}`}>
                   {r.status}

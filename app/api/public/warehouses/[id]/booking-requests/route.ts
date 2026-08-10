@@ -1,6 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
-import { prisma } from "@/lib/prisma";
-import { getPublicDockAvailability } from "@/lib/availability";
+import { submitPublicBookingRequest } from "@/lib/booking-requests";
 import { LoadType } from "@/app/generated/prisma/client";
 
 function isNonEmptyString(value: unknown): value is string {
@@ -58,29 +57,24 @@ export async function POST(request: NextRequest, { params }: { params: Promise<{
     return NextResponse.json({ error: "Validation failed", details: errors }, { status: 400 });
   }
 
-  const dock = await prisma.dock.findUnique({ where: { id: body.dockId as string }, select: { warehouseId: true } });
-  if (!dock || dock.warehouseId !== warehouseId) {
+  const result = await submitPublicBookingRequest({
+    warehouseId,
+    dockId: body.dockId as string,
+    startTime: startTime as Date,
+    endTime: endTime as Date,
+    companyName: (body.companyName as string).trim(),
+    contactEmail: (body.contactEmail as string).trim(),
+    contactPhone: isNonEmptyString(body.contactPhone) ? body.contactPhone.trim() : undefined,
+    referenceNumber: (body.referenceNumber as string).trim(),
+    loadType: body.loadType as LoadType,
+  });
+
+  if (result.outcome === "dock_not_found") {
     return NextResponse.json({ error: "Dock not found" }, { status: 404 });
   }
-
-  const availability = await getPublicDockAvailability(body.dockId as string, startTime as Date, endTime as Date);
-  if (!availability?.available) {
+  if (result.outcome === "unavailable") {
     return NextResponse.json({ error: "This slot is no longer available" }, { status: 409 });
   }
 
-  const bookingRequest = await prisma.bookingRequest.create({
-    data: {
-      warehouseId,
-      dockId: body.dockId as string,
-      startTime: startTime as Date,
-      endTime: endTime as Date,
-      companyName: (body.companyName as string).trim(),
-      contactEmail: (body.contactEmail as string).trim(),
-      contactPhone: isNonEmptyString(body.contactPhone) ? body.contactPhone.trim() : undefined,
-      referenceNumber: (body.referenceNumber as string).trim(),
-      loadType: body.loadType as LoadType,
-    },
-  });
-
-  return NextResponse.json({ id: bookingRequest.id, status: bookingRequest.status }, { status: 201 });
+  return NextResponse.json({ id: result.bookingRequestId, status: result.outcome.toUpperCase() }, { status: 201 });
 }

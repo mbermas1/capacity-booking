@@ -1,6 +1,7 @@
 import { notFound, redirect } from "next/navigation";
 import { prisma } from "@/lib/prisma";
 import { getPublicDockAvailability } from "@/lib/availability";
+import { submitPublicBookingRequest } from "@/lib/booking-requests";
 import { LoadType } from "@/app/generated/prisma/client";
 
 function parseUtc(datetimeLocalValue: string): Date | null {
@@ -39,33 +40,24 @@ async function submitRequest(slug: string, warehouseId: string, formData: FormDa
     redirect(`/book/${slug}?${params.toString()}`);
   }
 
-  const dock = await prisma.dock.findUnique({ where: { id: dockId }, select: { warehouseId: true } });
-  if (!dock || dock.warehouseId !== warehouseId) {
-    params.set("error", "invalid");
-    redirect(`/book/${slug}?${params.toString()}`);
-  }
-
-  const availability = await getPublicDockAvailability(dockId, startTime, endTime);
-  if (!availability?.available) {
-    params.set("error", "unavailable");
-    redirect(`/book/${slug}?${params.toString()}`);
-  }
-
-  await prisma.bookingRequest.create({
-    data: {
-      warehouseId,
-      dockId,
-      startTime,
-      endTime,
-      companyName,
-      contactEmail,
-      contactPhone: contactPhone || undefined,
-      referenceNumber,
-      loadType: loadType as LoadType,
-    },
+  const result = await submitPublicBookingRequest({
+    warehouseId,
+    dockId,
+    startTime,
+    endTime,
+    companyName,
+    contactEmail,
+    contactPhone: contactPhone || undefined,
+    referenceNumber,
+    loadType: loadType as LoadType,
   });
 
-  redirect(`/book/${slug}?submitted=1`);
+  if (result.outcome === "dock_not_found" || result.outcome === "unavailable") {
+    params.set("error", result.outcome === "dock_not_found" ? "invalid" : "unavailable");
+    redirect(`/book/${slug}?${params.toString()}`);
+  }
+
+  redirect(`/book/${slug}?submitted=${result.outcome}`);
 }
 
 export default async function PublicBookingPage({
@@ -108,7 +100,12 @@ export default async function PublicBookingPage({
           </p>
         </section>
 
-        {submitted === "1" && (
+        {submitted === "approved" && (
+          <p className="mb-6 rounded-lg bg-green-100 px-3 py-2 text-sm text-green-800 dark:bg-green-950 dark:text-green-300">
+            Booking confirmed! Your appointment has been automatically approved.
+          </p>
+        )}
+        {submitted === "pending" && (
           <p className="mb-6 rounded-lg bg-green-100 px-3 py-2 text-sm text-green-800 dark:bg-green-950 dark:text-green-300">
             Request submitted — a member of our team will confirm your appointment.
           </p>

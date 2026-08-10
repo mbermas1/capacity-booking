@@ -30,12 +30,22 @@ async function updateDockDetails(dockId: string, formData: FormData) {
   const minLeadTimeMinutes = parseOptionalNonNegativeInt(String(formData.get("minLeadTimeMinutes") ?? ""));
   const bufferMinutes = parseOptionalNonNegativeInt(String(formData.get("bufferMinutes") ?? ""));
   const reservedHighPrioritySlots = parseOptionalNonNegativeInt(String(formData.get("reservedHighPrioritySlots") ?? ""));
+  const requiresManualReview = formData.get("requiresManualReview") === "on";
 
   if (!name || !location || !equipmentType) return;
 
   await prisma.dock.update({
     where: { id: dockId },
-    data: { name, location, equipmentType, capacity, minLeadTimeMinutes, bufferMinutes, reservedHighPrioritySlots },
+    data: {
+      name,
+      location,
+      equipmentType,
+      capacity,
+      minLeadTimeMinutes,
+      bufferMinutes,
+      reservedHighPrioritySlots,
+      requiresManualReview,
+    },
   });
   revalidatePath(`/staff/docks/${dockId}`);
 }
@@ -215,6 +225,14 @@ export default async function StaffDockDetailPage({ params }: { params: Promise<
               className="h-10 w-24 rounded-lg border border-black/[.08] bg-white px-3 text-sm text-black dark:border-white/[.145] dark:bg-black dark:text-zinc-50"
             />
           </div>
+          <label className="flex items-center gap-2 text-sm text-zinc-700 dark:text-zinc-300">
+            <input
+              type="checkbox"
+              name="requiresManualReview"
+              defaultChecked={dock.requiresManualReview}
+            />
+            Require manual review for public booking requests
+          </label>
           <button
             type="submit"
             className="h-10 rounded-full bg-foreground px-4 text-sm font-medium text-background transition-colors hover:bg-[#383838] dark:hover:bg-[#ccc]"

@@ -16,6 +16,7 @@ type CreateStaffDockBody = {
   minLeadTimeMinutes?: unknown;
   bufferMinutes?: unknown;
   reservedHighPrioritySlots?: unknown;
+  requiresManualReview?: unknown;
 };
 
 function isPositiveInteger(value: unknown): value is number {
@@ -61,6 +62,9 @@ export async function POST(request: NextRequest) {
   if (body.reservedHighPrioritySlots !== undefined && !isNonNegativeInteger(body.reservedHighPrioritySlots)) {
     errors.push("reservedHighPrioritySlots must be a non-negative integer if provided");
   }
+  if (body.requiresManualReview !== undefined && typeof body.requiresManualReview !== "boolean") {
+    errors.push("requiresManualReview must be a boolean if provided");
+  }
 
   if (errors.length > 0) {
     return NextResponse.json({ error: "Validation failed", details: errors }, { status: 400 });
@@ -78,6 +82,9 @@ export async function POST(request: NextRequest) {
         ...(body.bufferMinutes !== undefined ? { bufferMinutes: body.bufferMinutes as number } : {}),
         ...(body.reservedHighPrioritySlots !== undefined
           ? { reservedHighPrioritySlots: body.reservedHighPrioritySlots as number }
+          : {}),
+        ...(body.requiresManualReview !== undefined
+          ? { requiresManualReview: body.requiresManualReview as boolean }
           : {}),
       },
     });

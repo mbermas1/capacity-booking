@@ -35,6 +35,7 @@ model Dock {
   minLeadTimeMinutes        Int? // null = no lead time requirement (portal bookings only)
   bufferMinutes             Int? // null = no buffer requirement, gap enforced before/after each booking
   reservedHighPrioritySlots Int? // null/0 = no reservation; slots only HIGH-priority bookings can use
+  requiresManualReview      Boolean              @default(false) // false = public booking requests auto-approve when available
   warehouse                 Warehouse            @relation(fields: [warehouseId], references: [id])
   warehouseId               String
   operatingHours            DockOperatingHours[]
