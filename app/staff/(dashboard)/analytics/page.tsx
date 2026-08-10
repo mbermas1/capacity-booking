@@ -2,9 +2,51 @@ import Link from "next/link";
 import { prisma } from "@/lib/prisma";
 import { getStaffMember } from "@/lib/staff-session";
 import { computeUtilization, computeUtilizationTrend } from "@/lib/utilization";
+import { computeDockDwellStats, computeDockDwellTrend } from "@/lib/dock-dwell";
+import { computeCarrierScore, computeCarrierScoreTrend, type CarrierScore } from "@/lib/carrier-score";
 
 const TREND_DAY_OPTIONS = [7, 14, 30] as const;
 const DEFAULT_TREND_DAYS = 14;
+
+const TIER_STYLES: Record<CarrierScore["tier"], string> = {
+  TRUSTED: "bg-green-100 text-green-800 dark:bg-green-950 dark:text-green-300",
+  STANDARD: "bg-blue-100 text-blue-800 dark:bg-blue-950 dark:text-blue-300",
+  FLAGGED: "bg-red-100 text-red-800 dark:bg-red-950 dark:text-red-300",
+  INSUFFICIENT_DATA: "bg-zinc-100 text-zinc-600 dark:bg-zinc-800 dark:text-zinc-400",
+};
+
+const TIER_LABELS: Record<CarrierScore["tier"], string> = {
+  TRUSTED: "Trusted",
+  STANDARD: "Standard",
+  FLAGGED: "Flagged",
+  INSUFFICIENT_DATA: "Not enough history",
+};
+
+function ComponentTrendRow({
+  label,
+  points,
+}: {
+  label: string;
+  points: { periodStart: string; periodEnd: string; value: number | null }[];
+}) {
+  return (
+    <div>
+      <span className="text-xs text-zinc-500 dark:text-zinc-400">{label}</span>
+      <div className="flex h-6 items-end gap-1">
+        {points.map((p) => (
+          <div
+            key={p.periodStart}
+            title={`${p.periodStart} – ${p.periodEnd}: ${
+              p.value !== null ? `${Math.round(p.value)}%` : "insufficient data"
+            }`}
+            className={`flex-1 rounded-t ${p.value !== null ? "bg-foreground" : "bg-zinc-200 dark:bg-zinc-700"}`}
+            style={{ height: `${p.value !== null ? Math.max(2, Math.round(p.value)) : 2}%` }}
+          />
+        ))}
+      </div>
+    </div>
+  );
+}
 
 function toISODate(date: Date): string {
   return date.toISOString().slice(0, 10);
@@ -61,11 +103,32 @@ export default async function StaffAnalyticsPage({
 
   const trendWindowStart = toISODate(new Date(dayStart.getTime() - (trendDays - 1) * 24 * 60 * 60 * 1000));
 
-  const [stats, carriers, trend] = await Promise.all([
+  const [stats, carriers, trend, allDocks] = await Promise.all([
     computeUtilization(dayStart, dayEnd, { carrierName, warehouseId: staff.warehouseId }),
     prisma.carrier.findMany({ orderBy: { name: "asc" }, select: { name: true } }),
     computeUtilizationTrend(dayStart, trendDays, { carrierName, warehouseId: staff.warehouseId }),
+    prisma.dock.findMany({ where: { warehouseId: staff.warehouseId }, orderBy: { name: "asc" } }),
   ]);
+
+  const dwellStats = new Map(
+    await Promise.all(allDocks.map(async (d) => [d.id, await computeDockDwellStats(d.id)] as const)),
+  );
+  const dwellTrends = new Map(
+    await Promise.all(allDocks.map(async (d) => [d.id, await computeDockDwellTrend(d.id)] as const)),
+  );
+
+  let filteredCarrier: { id: string; name: string } | null = null;
+  let carrierScore: CarrierScore | null = null;
+  let carrierScoreTrend: Awaited<ReturnType<typeof computeCarrierScoreTrend>> | null = null;
+  if (carrierName) {
+    filteredCarrier = await prisma.carrier.findFirst({ where: { name: carrierName }, select: { id: true, name: true } });
+    if (filteredCarrier) {
+      [carrierScore, carrierScoreTrend] = await Promise.all([
+        computeCarrierScore(filteredCarrier.id),
+        computeCarrierScoreTrend(filteredCarrier.id),
+      ]);
+    }
+  }
 
   const totalBookedMs = stats.reduce((sum, s) => sum + s.bookedMs, 0);
   const totalCapacityMs = stats.reduce((sum, s) => sum + s.totalMs, 0);
@@ -268,6 +331,134 @@ export default async function StaffAnalyticsPage({
             })}
           </ul>
           </>
+        )}
+      </section>
+
+      {carrierScore && carrierScoreTrend && filteredCarrier && (
+        <section className="rounded-2xl border border-black/[.08] bg-white p-4 dark:border-white/[.145] dark:bg-[#0a0a0a]">
+          <div className="mb-3 flex flex-wrap items-center gap-2">
+            <h2 className="text-lg font-medium text-black dark:text-zinc-50">
+              Carrier Score — {filteredCarrier.name}
+            </h2>
+            <span className={`rounded-full px-2 py-0.5 text-xs font-medium ${TIER_STYLES[carrierScore.tier]}`}>
+              {TIER_LABELS[carrierScore.tier]}
+            </span>
+            {carrierScore.overall !== null && (
+              <span className="font-mono text-sm text-zinc-500 dark:text-zinc-400">
+                {Math.round(carrierScore.overall)}/100
+              </span>
+            )}
+          </div>
+          <ul className="flex flex-col gap-1 text-xs text-zinc-600 dark:text-zinc-400">
+            <li>
+              On-time arrivals: {carrierScore.onTime.value !== null ? `${Math.round(carrierScore.onTime.value)}%` : "—"} (
+              {carrierScore.onTime.detail})
+            </li>
+            <li>
+              No-shows:{" "}
+              {carrierScore.noShow.value !== null ? `${Math.round(100 - carrierScore.noShow.value)}%` : "—"} (
+              {carrierScore.noShow.detail})
+            </li>
+            <li>
+              Dwell efficiency: {carrierScore.dwell.value !== null ? `${Math.round(carrierScore.dwell.value)}%` : "—"} (
+              {carrierScore.dwell.detail})
+            </li>
+            <li>
+              Cancellations:{" "}
+              {carrierScore.cancellation.value !== null ? `${Math.round(100 - carrierScore.cancellation.value)}%` : "—"} (
+              {carrierScore.cancellation.detail})
+            </li>
+          </ul>
+          <div className="mt-3">
+            <span className="text-xs font-medium text-zinc-600 dark:text-zinc-400">
+              Score history (last {carrierScoreTrend.length} weeks)
+            </span>
+            <div className="mt-2 flex h-10 items-end gap-1">
+              {carrierScoreTrend.map((bucket) => (
+                <div
+                  key={bucket.periodStart}
+                  title={`${bucket.periodStart} – ${bucket.periodEnd}: ${
+                    bucket.overall !== null ? `${Math.round(bucket.overall)}/100` : "insufficient data"
+                  }`}
+                  className={`flex-1 rounded-t ${
+                    bucket.overall !== null ? "bg-foreground" : "bg-zinc-200 dark:bg-zinc-700"
+                  }`}
+                  style={{ height: `${bucket.overall !== null ? Math.max(2, Math.round(bucket.overall)) : 2}%` }}
+                />
+              ))}
+            </div>
+            <div className="mt-3 flex flex-col gap-2">
+              <ComponentTrendRow
+                label="On-time"
+                points={carrierScoreTrend.map((b) => ({ ...b, value: b.onTime.value }))}
+              />
+              <ComponentTrendRow
+                label="No-shows"
+                points={carrierScoreTrend.map((b) => ({
+                  ...b,
+                  value: b.noShow.value !== null ? 100 - b.noShow.value : null,
+                }))}
+              />
+              <ComponentTrendRow
+                label="Dwell efficiency"
+                points={carrierScoreTrend.map((b) => ({ ...b, value: b.dwell.value }))}
+              />
+              <ComponentTrendRow
+                label="Cancellations"
+                points={carrierScoreTrend.map((b) => ({
+                  ...b,
+                  value: b.cancellation.value !== null ? 100 - b.cancellation.value : null,
+                }))}
+              />
+            </div>
+          </div>
+        </section>
+      )}
+
+      <section>
+        <h2 className="mb-4 text-lg font-medium text-black dark:text-zinc-50">Dwell Time</h2>
+        {allDocks.length === 0 ? (
+          <p className="text-sm text-zinc-600 dark:text-zinc-400">No docks configured yet.</p>
+        ) : (
+          <ul className="flex flex-col divide-y divide-black/[.06] rounded-2xl border border-black/[.08] bg-white px-4 dark:divide-white/[.08] dark:border-white/[.145] dark:bg-[#0a0a0a]">
+            {allDocks.map((dock) => {
+              const dwell = dwellStats.get(dock.id)!;
+              const dwellTrend = dwellTrends.get(dock.id)!;
+              const maxDwell = Math.max(1, ...dwellTrend.map((b) => b.averageDwellMinutes ?? 0));
+              return (
+                <li key={dock.id} className="flex flex-col gap-2 py-3">
+                  <span className="text-sm font-medium text-black dark:text-zinc-50">{dock.name}</span>
+                  <span className="text-xs text-zinc-500 dark:text-zinc-400">
+                    {dwell.averageDwellMinutes !== null
+                      ? `Avg dwell: ${Math.round(dwell.averageDwellMinutes)} min (scheduled: ${Math.round(dwell.averageScheduledMinutes!)} min) · ${dwell.sampleSize} completed bookings`
+                      : "Not enough completed bookings yet for a dwell-time average"}
+                  </span>
+                  <div className="flex h-10 items-end gap-0.5">
+                    {dwellTrend.map((b) => (
+                      <div
+                        key={b.periodStart}
+                        title={
+                          b.averageDwellMinutes !== null
+                            ? `${b.periodStart} – ${b.periodEnd}: avg ${Math.round(b.averageDwellMinutes)} min vs ${Math.round(b.averageScheduledMinutes!)} min scheduled`
+                            : `${b.periodStart} – ${b.periodEnd}: insufficient data`
+                        }
+                        className={`flex-1 rounded-t ${
+                          b.averageDwellMinutes !== null ? "bg-foreground" : "bg-zinc-200 dark:bg-zinc-700"
+                        }`}
+                        style={{
+                          height: `${
+                            b.averageDwellMinutes !== null
+                              ? Math.max(2, Math.round((b.averageDwellMinutes / maxDwell) * 100))
+                              : 2
+                          }%`,
+                        }}
+                      />
+                    ))}
+                  </div>
+                </li>
+              );
+            })}
+          </ul>
         )}
       </section>
     </div>
