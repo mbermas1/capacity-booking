@@ -2,6 +2,7 @@ import Link from "next/link";
 import { cookies } from "next/headers";
 import { redirect } from "next/navigation";
 import { getPortalCarrier, requirePortalSession, PORTAL_SESSION_COOKIE } from "@/lib/portal-session";
+import { PARTNER_TYPE_LABELS } from "@/lib/partner-type";
 
 async function logout() {
   "use server";
@@ -13,6 +14,7 @@ async function logout() {
 export default async function PortalDashboardLayout({ children }: { children: React.ReactNode }) {
   await requirePortalSession();
   const carrier = await getPortalCarrier();
+  const portalTitle = carrier ? `${PARTNER_TYPE_LABELS[carrier.partnerType]} Portal` : "Carrier Portal";
 
   return (
     <div className="flex flex-1 flex-col bg-zinc-50 font-sans dark:bg-black">
@@ -20,7 +22,7 @@ export default async function PortalDashboardLayout({ children }: { children: Re
         <div className="mx-auto flex w-full max-w-4xl items-center justify-between px-6 py-4 sm:px-10">
           <div className="flex items-center gap-6">
             <Link href="/portal" className="text-lg font-semibold text-black dark:text-zinc-50">
-              Carrier Portal
+              {portalTitle}
             </Link>
             <Link
               href="/portal/book"

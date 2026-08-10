@@ -2,12 +2,7 @@ import { revalidatePath } from "next/cache";
 import { prisma } from "@/lib/prisma";
 import { hashPassword } from "@/lib/portal-auth";
 import { PartnerType } from "@/app/generated/prisma/client";
-
-const PARTNER_TYPE_LABELS: Record<PartnerType, string> = {
-  CARRIER: "Carrier",
-  SUPPLIER: "Supplier",
-  THIRD_PARTY_LOGISTICS: "3PL",
-};
+import { PARTNER_TYPE_LABELS } from "@/lib/partner-type";
 
 async function createCarrierAccount(formData: FormData) {
   "use server";
