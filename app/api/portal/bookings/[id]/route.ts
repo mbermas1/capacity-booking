@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { CARRIER_NAME_INCLUDE, withCarrierName } from "@/lib/booking-response";
+import { notifyBookingCancelled } from "@/lib/bookings";
 import { prisma } from "@/lib/prisma";
 import { getPortalSession } from "@/lib/portal-session";
 
@@ -38,6 +39,12 @@ export async function DELETE(
     return NextResponse.json({ error: "Booking not found" }, { status: 404 });
   }
 
-  await prisma.booking.delete({ where: { id } });
+  const deleted = await prisma.booking.delete({
+    where: { id },
+    include: { dock: { select: { name: true } }, carrier: { select: { email: true } } },
+  });
+
+  await notifyBookingCancelled(deleted);
+
   return new NextResponse(null, { status: 204 });
 }

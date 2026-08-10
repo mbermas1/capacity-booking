@@ -6,7 +6,7 @@ import {
   findUnacceptedCommodities,
   requiredMinDurationMinutes,
 } from "@/lib/booking-constraints";
-import { sendBookingConfirmationEmail } from "@/lib/email";
+import { sendBookingConfirmationEmail, sendBookingCancellationEmail } from "@/lib/email";
 import { BookingPriority } from "@/app/generated/prisma/client";
 import type {
   BookingStatus,
@@ -185,6 +185,29 @@ export async function notifyBookingConfirmed(bookingId: string): Promise<void> {
   if (!booking?.carrier.email) return;
 
   await sendBookingConfirmationEmail(booking.carrier.email, {
+    dockName: booking.dock.name,
+    startTime: booking.startTime,
+    endTime: booking.endTime,
+    referenceNumber: booking.referenceNumber,
+  });
+}
+
+/**
+ * Takes already-fetched data rather than a bookingId (unlike
+ * notifyBookingConfirmed) — the row is gone by the time this runs, so there's
+ * nothing left to look up. Pass the result of a delete() call with dock/carrier
+ * included.
+ */
+export async function notifyBookingCancelled(booking: {
+  dock: { name: string };
+  carrier: { email: string | null };
+  startTime: Date;
+  endTime: Date;
+  referenceNumber: string;
+}): Promise<void> {
+  if (!booking.carrier.email) return;
+
+  await sendBookingCancellationEmail(booking.carrier.email, {
     dockName: booking.dock.name,
     startTime: booking.startTime,
     endTime: booking.endTime,

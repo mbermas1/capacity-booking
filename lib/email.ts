@@ -55,3 +55,14 @@ export async function sendBookingConfirmationEmail(
     `<p>Your dock appointment is confirmed.</p><ul><li>Dock: ${context.dockName}</li><li>Time: ${context.startTime.toISOString()}–${context.endTime.toISOString()} UTC</li><li>Reference: ${context.referenceNumber}</li></ul>`,
   );
 }
+
+export async function sendBookingCancellationEmail(
+  to: string,
+  context: { dockName: string; startTime: Date; endTime: Date; referenceNumber: string },
+): Promise<boolean> {
+  return sendEmail(
+    to,
+    `Booking cancelled — ${context.dockName}`,
+    `<p>Your dock appointment has been cancelled.</p><ul><li>Dock: ${context.dockName}</li><li>Time: ${context.startTime.toISOString()}–${context.endTime.toISOString()} UTC</li><li>Reference: ${context.referenceNumber}</li></ul>`,
+  );
+}

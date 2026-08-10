@@ -1,6 +1,7 @@
 import { revalidatePath } from "next/cache";
 import { prisma } from "@/lib/prisma";
 import { getPortalSession } from "@/lib/portal-session";
+import { notifyBookingCancelled } from "@/lib/bookings";
 import { STATUS_STYLES, LOAD_TYPE_STYLES, formatTime } from "@/lib/booking-display";
 
 async function cancelBooking(formData: FormData) {
@@ -13,7 +14,13 @@ async function cancelBooking(formData: FormData) {
   const booking = await prisma.booking.findUnique({ where: { id: bookingId } });
   if (!booking || booking.carrierId !== session.carrierId) return;
 
-  await prisma.booking.delete({ where: { id: bookingId } });
+  const deleted = await prisma.booking.delete({
+    where: { id: bookingId },
+    include: { dock: { select: { name: true } }, carrier: { select: { email: true } } },
+  });
+
+  await notifyBookingCancelled(deleted);
+
   revalidatePath("/portal");
 }
 

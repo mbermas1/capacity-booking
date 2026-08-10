@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { CARRIER_NAME_INCLUDE, withCarrierName } from "@/lib/booking-response";
+import { notifyBookingCancelled } from "@/lib/bookings";
 import { prisma } from "@/lib/prisma";
 import { BookingStatus, Prisma } from "@/app/generated/prisma/client";
 
@@ -73,7 +74,13 @@ export async function DELETE(
   const { id } = await params;
 
   try {
-    await prisma.booking.delete({ where: { id } });
+    const booking = await prisma.booking.delete({
+      where: { id },
+      include: { dock: { select: { name: true } }, carrier: { select: { email: true } } },
+    });
+
+    await notifyBookingCancelled(booking);
+
     return new NextResponse(null, { status: 204 });
   } catch (error) {
     if (error instanceof Prisma.PrismaClientKnownRequestError && error.code === "P2025") {
