@@ -62,3 +62,74 @@ export async function computeUtilization(
     utilization: rangeMs > 0 ? (bookedMsByDock.get(dock.id) ?? 0) / rangeMs : 0,
   }));
 }
+
+function toISODate(date: Date): string {
+  return date.toISOString().slice(0, 10);
+}
+
+export type DockUtilizationTrend = {
+  dockId: string;
+  dockName: string;
+  days: { date: string; utilization: number }[];
+};
+
+/**
+ * Trailing-window trend, separate from computeUtilization rather than N calls
+ * to it — fetches the whole window's bookings once and buckets booked-ms by
+ * [dockId, dayIndex] in memory instead of days*docks separate query pairs.
+ * Not optimized for huge ranges/booking volumes (loops all numDays per
+ * booking) — acceptable at this app's scale, same as everywhere else here.
+ */
+export async function computeUtilizationTrend(
+  endDate: Date, // inclusive last day of the window, 00:00 UTC boundary
+  numDays: number,
+  filter?: { carrierName?: string; warehouseId?: string },
+): Promise<DockUtilizationTrend[]> {
+  const dayMs = 24 * 60 * 60 * 1000;
+  const windowStart = new Date(endDate.getTime() - (numDays - 1) * dayMs);
+  const windowEnd = new Date(endDate.getTime() + dayMs);
+
+  const docks = await prisma.dock.findMany({
+    where: filter?.warehouseId ? { warehouseId: filter.warehouseId } : undefined,
+    orderBy: { name: "asc" },
+  });
+
+  const bookings = await prisma.booking.findMany({
+    where: {
+      ...(filter?.carrierName ? { carrier: { name: filter.carrierName } } : {}),
+      ...(filter?.warehouseId ? { dock: { warehouseId: filter.warehouseId } } : {}),
+      startTime: { lt: windowEnd },
+      endTime: { gt: windowStart },
+    },
+    select: { dockId: true, startTime: true, endTime: true },
+  });
+
+  const bookedMsByDockDay = new Map<string, number>(); // key: `${dockId}|${dayIndex}`
+  for (const b of bookings) {
+    for (let i = 0; i < numDays; i++) {
+      const dayStart = new Date(windowStart.getTime() + i * dayMs);
+      const dayEnd = new Date(dayStart.getTime() + dayMs);
+      const overlapStart = b.startTime > dayStart ? b.startTime : dayStart;
+      const overlapEnd = b.endTime < dayEnd ? b.endTime : dayEnd;
+      const ms = overlapEnd.getTime() - overlapStart.getTime();
+      if (ms > 0) {
+        const key = `${b.dockId}|${i}`;
+        bookedMsByDockDay.set(key, (bookedMsByDockDay.get(key) ?? 0) + ms);
+      }
+    }
+  }
+
+  // Same "only relevant docks" behavior as computeUtilization: carrier-filtered
+  // only shows docks that carrier booked at least once somewhere in the window.
+  const dockHasBooking = new Set(bookings.map((b) => b.dockId));
+  const relevantDocks = filter?.carrierName ? docks.filter((d) => dockHasBooking.has(d.id)) : docks;
+
+  return relevantDocks.map((dock) => ({
+    dockId: dock.id,
+    dockName: dock.name,
+    days: Array.from({ length: numDays }, (_, i) => ({
+      date: toISODate(new Date(windowStart.getTime() + i * dayMs)),
+      utilization: (bookedMsByDockDay.get(`${dock.id}|${i}`) ?? 0) / dayMs,
+    })),
+  }));
+}

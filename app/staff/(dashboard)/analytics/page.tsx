@@ -1,7 +1,10 @@
 import Link from "next/link";
 import { prisma } from "@/lib/prisma";
 import { getStaffMember } from "@/lib/staff-session";
-import { computeUtilization } from "@/lib/utilization";
+import { computeUtilization, computeUtilizationTrend } from "@/lib/utilization";
+
+const TREND_DAY_OPTIONS = [7, 14, 30] as const;
+const DEFAULT_TREND_DAYS = 14;
 
 function toISODate(date: Date): string {
   return date.toISOString().slice(0, 10);
@@ -16,6 +19,11 @@ function parseDateParam(value: string | undefined): Date {
   return new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), now.getUTCDate()));
 }
 
+function parseDaysParam(value: string | undefined): number {
+  const parsed = Number(value);
+  return TREND_DAY_OPTIONS.includes(parsed as (typeof TREND_DAY_OPTIONS)[number]) ? parsed : DEFAULT_TREND_DAYS;
+}
+
 function formatDuration(ms: number): string {
   const totalMinutes = Math.round(ms / 60000);
   const hours = Math.floor(totalMinutes / 60);
@@ -23,16 +31,26 @@ function formatDuration(ms: number): string {
   return `${hours}h ${minutes}m`;
 }
 
+function buildQuery(params: Record<string, string | undefined>): string {
+  const search = new URLSearchParams();
+  for (const [key, value] of Object.entries(params)) {
+    if (value) search.set(key, value);
+  }
+  const qs = search.toString();
+  return qs ? `?${qs}` : "";
+}
+
 export default async function StaffAnalyticsPage({
   searchParams,
 }: {
-  searchParams: Promise<{ date?: string; carrierName?: string }>;
+  searchParams: Promise<{ date?: string; carrierName?: string; days?: string }>;
 }) {
   const staff = await getStaffMember();
   if (!staff) return null;
 
-  const { date: dateParam, carrierName: carrierNameParam } = await searchParams;
+  const { date: dateParam, carrierName: carrierNameParam, days: daysParam } = await searchParams;
   const carrierName = carrierNameParam?.trim() || undefined;
+  const trendDays = parseDaysParam(daysParam);
 
   const dayStart = parseDateParam(dateParam);
   const dayEnd = new Date(dayStart.getTime() + 24 * 60 * 60 * 1000);
@@ -41,9 +59,12 @@ export default async function StaffAnalyticsPage({
   const prevDate = toISODate(new Date(dayStart.getTime() - 24 * 60 * 60 * 1000));
   const nextDate = toISODate(new Date(dayStart.getTime() + 24 * 60 * 60 * 1000));
 
-  const [stats, carriers] = await Promise.all([
+  const trendWindowStart = toISODate(new Date(dayStart.getTime() - (trendDays - 1) * 24 * 60 * 60 * 1000));
+
+  const [stats, carriers, trend] = await Promise.all([
     computeUtilization(dayStart, dayEnd, { carrierName, warehouseId: staff.warehouseId }),
     prisma.carrier.findMany({ orderBy: { name: "asc" }, select: { name: true } }),
+    computeUtilizationTrend(dayStart, trendDays, { carrierName, warehouseId: staff.warehouseId }),
   ]);
 
   return (
@@ -58,12 +79,13 @@ export default async function StaffAnalyticsPage({
           </div>
           <div className="flex items-center gap-2">
             <Link
-              href={`/staff/analytics?date=${prevDate}${carrierName ? `&carrierName=${encodeURIComponent(carrierName)}` : ""}`}
+              href={`/staff/analytics${buildQuery({ date: prevDate, carrierName, days: String(trendDays) })}`}
               className="flex h-9 items-center justify-center rounded-full border border-black/[.08] px-4 text-sm font-medium transition-colors hover:bg-black/[.04] dark:border-white/[.145] dark:hover:bg-[#1a1a1a]"
             >
               ← Prev
             </Link>
             <form action="/staff/analytics" className="flex items-center gap-2">
+              <input type="hidden" name="days" value={trendDays} />
               <input
                 type="date"
                 name="date"
@@ -91,7 +113,7 @@ export default async function StaffAnalyticsPage({
               </button>
             </form>
             <Link
-              href={`/staff/analytics?date=${nextDate}${carrierName ? `&carrierName=${encodeURIComponent(carrierName)}` : ""}`}
+              href={`/staff/analytics${buildQuery({ date: nextDate, carrierName, days: String(trendDays) })}`}
               className="flex h-9 items-center justify-center rounded-full border border-black/[.08] px-4 text-sm font-medium transition-colors hover:bg-black/[.04] dark:border-white/[.145] dark:hover:bg-[#1a1a1a]"
             >
               Next →
@@ -125,6 +147,56 @@ export default async function StaffAnalyticsPage({
                 </li>
               );
             })}
+          </ul>
+        )}
+      </section>
+
+      <section>
+        <div className="mb-4 flex flex-wrap items-center justify-between gap-2">
+          <div>
+            <h2 className="text-lg font-medium text-black dark:text-zinc-50">Trends</h2>
+            <p className="text-sm text-zinc-600 dark:text-zinc-400">
+              {trendWindowStart} – {dateStr} (UTC)
+            </p>
+          </div>
+          <div className="flex items-center gap-2">
+            {TREND_DAY_OPTIONS.map((n) => (
+              <Link
+                key={n}
+                href={`/staff/analytics${buildQuery({ date: dateStr, carrierName, days: String(n) })}`}
+                className={`flex h-8 items-center justify-center rounded-full border px-3 text-xs font-medium transition-colors ${
+                  n === trendDays
+                    ? "border-foreground bg-foreground text-background"
+                    : "border-black/[.08] hover:bg-black/[.04] dark:border-white/[.145] dark:hover:bg-[#1a1a1a]"
+                }`}
+              >
+                {n}d
+              </Link>
+            ))}
+          </div>
+        </div>
+
+        {trend.length === 0 ? (
+          <p className="text-sm text-zinc-600 dark:text-zinc-400">
+            {carrierName ? "No bookings for that carrier in this window." : "No docks configured yet."}
+          </p>
+        ) : (
+          <ul className="flex flex-col divide-y divide-black/[.06] rounded-2xl border border-black/[.08] bg-white px-4 dark:divide-white/[.08] dark:border-white/[.145] dark:bg-[#0a0a0a]">
+            {trend.map((dock) => (
+              <li key={dock.dockId} className="flex flex-col gap-2 py-3">
+                <span className="text-sm font-medium text-black dark:text-zinc-50">{dock.dockName}</span>
+                <div className="flex h-10 items-end gap-0.5">
+                  {dock.days.map((d) => (
+                    <div
+                      key={d.date}
+                      title={`${d.date}: ${Math.round(d.utilization * 100)}%`}
+                      className="flex-1 rounded-t bg-foreground"
+                      style={{ height: `${Math.max(2, Math.round(d.utilization * 100))}%` }}
+                    />
+                  ))}
+                </div>
+              </li>
+            ))}
           </ul>
         )}
       </section>
