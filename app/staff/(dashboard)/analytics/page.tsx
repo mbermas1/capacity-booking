@@ -67,6 +67,22 @@ export default async function StaffAnalyticsPage({
     computeUtilizationTrend(dayStart, trendDays, { carrierName, warehouseId: staff.warehouseId }),
   ]);
 
+  const totalBookedMs = stats.reduce((sum, s) => sum + s.bookedMs, 0);
+  const totalCapacityMs = stats.reduce((sum, s) => sum + s.totalMs, 0);
+  const totalBookings = stats.reduce((sum, s) => sum + s.bookingCount, 0);
+  const warehousePct = totalCapacityMs > 0 ? Math.round((totalBookedMs / totalCapacityMs) * 100) : 0;
+
+  const warehouseTrend =
+    trend.length > 0
+      ? Array.from({ length: trendDays }, (_, i) => {
+          const dayUtilizations = trend.map((dock) => dock.days[i].utilization);
+          return {
+            date: trend[0].days[i].date,
+            utilization: dayUtilizations.reduce((a, b) => a + b, 0) / dayUtilizations.length,
+          };
+        })
+      : [];
+
   return (
     <div className="flex flex-col gap-8">
       <section>
@@ -126,7 +142,20 @@ export default async function StaffAnalyticsPage({
             {carrierName ? "No bookings for that carrier on this date." : "No docks configured yet."}
           </p>
         ) : (
-          <ul className="flex flex-col divide-y divide-black/[.06] rounded-2xl border border-black/[.08] bg-white px-4 dark:divide-white/[.08] dark:border-white/[.145] dark:bg-[#0a0a0a]">
+          <>
+            <div className="mb-3 flex flex-col gap-2 rounded-2xl border border-black/[.08] bg-zinc-50 p-3 dark:border-white/[.145] dark:bg-zinc-900">
+              <div className="flex flex-wrap items-center justify-between gap-2">
+                <span className="text-sm font-semibold text-black dark:text-zinc-50">Warehouse-wide</span>
+                <span className="font-mono text-xs font-semibold text-zinc-600 dark:text-zinc-300">
+                  {totalBookings} booking{totalBookings === 1 ? "" : "s"} · {formatDuration(totalBookedMs)} booked ·{" "}
+                  {warehousePct}%
+                </span>
+              </div>
+              <div className="h-2 w-full overflow-hidden rounded-full bg-zinc-200 dark:bg-zinc-700">
+                <div className="h-full rounded-full bg-foreground" style={{ width: `${Math.min(100, warehousePct)}%` }} />
+              </div>
+            </div>
+            <ul className="flex flex-col divide-y divide-black/[.06] rounded-2xl border border-black/[.08] bg-white px-4 dark:divide-white/[.08] dark:border-white/[.145] dark:bg-[#0a0a0a]">
             {stats.map((stat) => {
               const pct = Math.round(stat.utilization * 100);
               return (
@@ -147,7 +176,8 @@ export default async function StaffAnalyticsPage({
                 </li>
               );
             })}
-          </ul>
+            </ul>
+          </>
         )}
       </section>
 
@@ -181,6 +211,20 @@ export default async function StaffAnalyticsPage({
             {carrierName ? "No bookings for that carrier in this window." : "No docks configured yet."}
           </p>
         ) : (
+          <>
+            <div className="mb-3 flex flex-col gap-2 rounded-2xl border border-black/[.08] bg-zinc-50 p-3 dark:border-white/[.145] dark:bg-zinc-900">
+              <span className="text-sm font-semibold text-black dark:text-zinc-50">Warehouse-wide</span>
+              <div className="flex h-10 items-end gap-0.5">
+                {warehouseTrend.map((d) => (
+                  <div
+                    key={d.date}
+                    title={`${d.date}: ${Math.round(d.utilization * 100)}%`}
+                    className="flex-1 rounded-t bg-foreground"
+                    style={{ height: `${Math.max(2, Math.round(d.utilization * 100))}%` }}
+                  />
+                ))}
+              </div>
+            </div>
           <ul className="flex flex-col divide-y divide-black/[.06] rounded-2xl border border-black/[.08] bg-white px-4 dark:divide-white/[.08] dark:border-white/[.145] dark:bg-[#0a0a0a]">
             {trend.map((dock) => (
               <li key={dock.dockId} className="flex flex-col gap-2 py-3">
@@ -198,6 +242,7 @@ export default async function StaffAnalyticsPage({
               </li>
             ))}
           </ul>
+          </>
         )}
       </section>
     </div>
