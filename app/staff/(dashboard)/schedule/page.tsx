@@ -2,16 +2,23 @@ import Link from "next/link";
 import { revalidatePath } from "next/cache";
 import { prisma } from "@/lib/prisma";
 import { getStaffMember } from "@/lib/staff-session";
+import { canAccessWarehouse, canOperateSchedule, getWarehouseScope, warehouseWhereClause } from "@/lib/staff-roles";
 import { detectNoShowMany, checkInBooking, completeBooking } from "@/lib/bookings";
 import { STATUS_STYLES, LOAD_TYPE_STYLES, PRIORITY_STYLES, formatTime } from "@/lib/booking-display";
+
+async function assertBookingAccess(staff: NonNullable<Awaited<ReturnType<typeof getStaffMember>>>, bookingId: string): Promise<boolean> {
+  const booking = await prisma.booking.findUnique({ where: { id: bookingId }, select: { dock: { select: { warehouseId: true } } } });
+  return booking !== null && canAccessWarehouse(staff, booking.dock.warehouseId);
+}
 
 async function checkIn(formData: FormData) {
   "use server";
 
   const staff = await getStaffMember();
-  if (!staff) return;
+  if (!staff || !canOperateSchedule(staff.role)) return;
 
   const bookingId = String(formData.get("bookingId") ?? "");
+  if (!(await assertBookingAccess(staff, bookingId))) return;
   try {
     await checkInBooking(bookingId);
   } catch {
@@ -25,9 +32,10 @@ async function complete(formData: FormData) {
   "use server";
 
   const staff = await getStaffMember();
-  if (!staff) return;
+  if (!staff || !canOperateSchedule(staff.role)) return;
 
   const bookingId = String(formData.get("bookingId") ?? "");
+  if (!(await assertBookingAccess(staff, bookingId))) return;
   try {
     await completeBooking(bookingId);
   } catch {
@@ -57,6 +65,9 @@ export default async function StaffSchedulePage({
 }) {
   const staff = await getStaffMember();
   if (!staff) return null;
+  if (!canOperateSchedule(staff.role)) {
+    return <p className="text-sm text-zinc-600 dark:text-zinc-400">You don&apos;t have access to this page.</p>;
+  }
 
   const { date: dateParam } = await searchParams;
   const dayStart = parseDateParam(dateParam);
@@ -66,10 +77,14 @@ export default async function StaffSchedulePage({
   const prevDate = toISODate(new Date(dayStart.getTime() - 24 * 60 * 60 * 1000));
   const nextDate = toISODate(new Date(dayStart.getTime() + 24 * 60 * 60 * 1000));
 
+  const scope = getWarehouseScope(staff);
+  const multiWarehouse = scope === null || scope.length > 1;
+
   const rawDocks = await prisma.dock.findMany({
-    where: { warehouseId: staff.warehouseId },
+    where: { warehouseId: warehouseWhereClause(staff) },
     orderBy: { name: "asc" },
     include: {
+      warehouse: { select: { name: true } },
       bookings: {
         where: {
           startTime: { lt: dayEnd },
@@ -97,7 +112,8 @@ export default async function StaffSchedulePage({
           <div>
             <h1 className="text-xl font-semibold text-black dark:text-zinc-50">Dock Schedule</h1>
             <p className="text-sm text-zinc-600 dark:text-zinc-400">
-              {totalBookings} booking{totalBookings === 1 ? "" : "s"} at {staff.warehouse?.name} on {dateStr} (UTC)
+              {totalBookings} booking{totalBookings === 1 ? "" : "s"}{" "}
+              {multiWarehouse ? "across your locations" : `at ${staff.warehouse?.name}`} on {dateStr} (UTC)
             </p>
           </div>
           <div className="flex items-center gap-2">
@@ -140,7 +156,10 @@ export default async function StaffSchedulePage({
                 className="rounded-2xl border border-black/[.08] bg-white p-5 dark:border-white/[.145] dark:bg-[#0a0a0a]"
               >
                 <div className="mb-3 flex items-baseline justify-between">
-                  <h2 className="text-lg font-medium text-black dark:text-zinc-50">{dock.name}</h2>
+                  <h2 className="text-lg font-medium text-black dark:text-zinc-50">
+                    {multiWarehouse && `${dock.warehouse.name} · `}
+                    {dock.name}
+                  </h2>
                   <span className="text-xs text-zinc-500 dark:text-zinc-400">
                     {dock.location} · {dock.equipmentType}
                   </span>

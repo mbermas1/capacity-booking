@@ -1,6 +1,13 @@
 import Link from "next/link";
 import { revalidatePath } from "next/cache";
 import { getStaffMember } from "@/lib/staff-session";
+import {
+  canAccessWarehouse,
+  canManageCapacityRules,
+  canViewReports,
+  getWarehouseScope,
+  warehouseWhereClause,
+} from "@/lib/staff-roles";
 import { prisma } from "@/lib/prisma";
 import { computeDwellReport } from "@/lib/reports";
 
@@ -38,7 +45,7 @@ async function updateDetentionRate(warehouseId: string, formData: FormData) {
   "use server";
 
   const staff = await getStaffMember();
-  if (!staff || staff.warehouseId !== warehouseId) return;
+  if (!staff || !canManageCapacityRules(staff.role) || !canAccessWarehouse(staff, warehouseId)) return;
 
   const rateRaw = String(formData.get("detentionRatePerHour") ?? "").trim();
   const freeRaw = String(formData.get("detentionFreeMinutes") ?? "").trim();
@@ -64,18 +71,27 @@ export default async function DwellReportPage({
 }) {
   const staff = await getStaffMember();
   if (!staff) return null;
+  if (!canViewReports(staff.role)) {
+    return <p className="text-sm text-zinc-600 dark:text-zinc-400">You don&apos;t have access to this page.</p>;
+  }
+  const scope = getWarehouseScope(staff);
+  const multiWarehouse = scope === null || scope.length > 1;
+  const canEditRate = canManageCapacityRules(staff.role);
 
   const { start: startParam, end: endParam, carrierName: carrierNameParam } = await searchParams;
   const carrierName = carrierNameParam?.trim() || undefined;
   const { start, end, endInclusive } = parseRange(startParam, endParam, DEFAULT_RANGE_DAYS);
 
-  const [rows, carriers, warehouse] = await Promise.all([
-    computeDwellReport(start, end, { carrierName, warehouseId: staff.warehouseId }),
+  const [rows, carriers, rateWarehouses] = await Promise.all([
+    computeDwellReport(start, end, { carrierName, warehouseId: warehouseWhereClause(staff) }),
     prisma.carrier.findMany({ orderBy: { name: "asc" }, select: { name: true } }),
-    prisma.warehouse.findUnique({
-      where: { id: staff.warehouseId },
-      select: { detentionRatePerHour: true, detentionFreeMinutes: true },
-    }),
+    canEditRate
+      ? prisma.warehouse.findMany({
+          where: scope === null ? {} : { id: { in: scope } },
+          orderBy: { name: "asc" },
+          select: { id: true, name: true, detentionRatePerHour: true, detentionFreeMinutes: true },
+        })
+      : Promise.resolve([]),
   ]);
 
   const csvHref = `/api/staff/reports/dwell/export${buildQuery({
@@ -179,50 +195,62 @@ export default async function DwellReportPage({
         </span>
       </div>
 
-      <div className="no-print rounded-2xl border border-black/[.08] bg-white p-4 dark:border-white/[.145] dark:bg-[#0a0a0a]">
-        <h2 className="mb-2 text-sm font-medium text-black dark:text-zinc-50">Detention Rate</h2>
-        <form action={updateDetentionRate.bind(null, staff.warehouseId)} className="flex flex-wrap items-end gap-2">
-          <div className="flex flex-col gap-1">
-            <label htmlFor="detentionRatePerHour" className="text-xs text-zinc-600 dark:text-zinc-400">
-              Rate ($/hour, optional)
-            </label>
-            <input
-              id="detentionRatePerHour"
-              type="number"
-              name="detentionRatePerHour"
-              min="0"
-              step="0.01"
-              defaultValue={warehouse?.detentionRatePerHour ?? ""}
-              className="h-9 w-32 rounded-lg border border-black/[.08] bg-white px-3 text-sm text-black dark:border-white/[.145] dark:bg-black dark:text-zinc-50"
-            />
-          </div>
-          <div className="flex flex-col gap-1">
-            <label htmlFor="detentionFreeMinutes" className="text-xs text-zinc-600 dark:text-zinc-400">
-              Free time (minutes, optional)
-            </label>
-            <input
-              id="detentionFreeMinutes"
-              type="number"
-              name="detentionFreeMinutes"
-              min="0"
-              defaultValue={warehouse?.detentionFreeMinutes ?? ""}
-              className="h-9 w-32 rounded-lg border border-black/[.08] bg-white px-3 text-sm text-black dark:border-white/[.145] dark:bg-black dark:text-zinc-50"
-            />
-          </div>
-          <button
-            type="submit"
-            className="h-9 rounded-full border border-black/[.08] px-4 text-sm font-medium transition-colors hover:bg-black/[.04] dark:border-white/[.145] dark:hover:bg-[#1a1a1a]"
+      {canEditRate && (
+      <div className="no-print flex flex-col gap-3">
+        {rateWarehouses.map((w) => (
+          <div
+            key={w.id}
+            className="rounded-2xl border border-black/[.08] bg-white p-4 dark:border-white/[.145] dark:bg-[#0a0a0a]"
           >
-            Save
-          </button>
-        </form>
-        <p className="mt-2 text-xs text-zinc-500 dark:text-zinc-500">
+            <h2 className="mb-2 text-sm font-medium text-black dark:text-zinc-50">
+              Detention Rate{multiWarehouse ? ` — ${w.name}` : ""}
+            </h2>
+            <form action={updateDetentionRate.bind(null, w.id)} className="flex flex-wrap items-end gap-2">
+              <div className="flex flex-col gap-1">
+                <label htmlFor={`detentionRatePerHour-${w.id}`} className="text-xs text-zinc-600 dark:text-zinc-400">
+                  Rate ($/hour, optional)
+                </label>
+                <input
+                  id={`detentionRatePerHour-${w.id}`}
+                  type="number"
+                  name="detentionRatePerHour"
+                  min="0"
+                  step="0.01"
+                  defaultValue={w.detentionRatePerHour ?? ""}
+                  className="h-9 w-32 rounded-lg border border-black/[.08] bg-white px-3 text-sm text-black dark:border-white/[.145] dark:bg-black dark:text-zinc-50"
+                />
+              </div>
+              <div className="flex flex-col gap-1">
+                <label htmlFor={`detentionFreeMinutes-${w.id}`} className="text-xs text-zinc-600 dark:text-zinc-400">
+                  Free time (minutes, optional)
+                </label>
+                <input
+                  id={`detentionFreeMinutes-${w.id}`}
+                  type="number"
+                  name="detentionFreeMinutes"
+                  min="0"
+                  defaultValue={w.detentionFreeMinutes ?? ""}
+                  className="h-9 w-32 rounded-lg border border-black/[.08] bg-white px-3 text-sm text-black dark:border-white/[.145] dark:bg-black dark:text-zinc-50"
+                />
+              </div>
+              <button
+                type="submit"
+                className="h-9 rounded-full border border-black/[.08] px-4 text-sm font-medium transition-colors hover:bg-black/[.04] dark:border-white/[.145] dark:hover:bg-[#1a1a1a]"
+              >
+                Save
+              </button>
+            </form>
+          </div>
+        ))}
+        <p className="text-xs text-zinc-500 dark:text-zinc-500">
           Leave the rate blank to hide cost estimates. Free time is the grace period before detention starts accruing.
         </p>
       </div>
+      )}
 
       <p className="text-sm text-zinc-600 dark:text-zinc-400">
-        {staff.warehouse?.name} · {toISODate(start)} – {toISODate(endInclusive)} (UTC)
+        {multiWarehouse ? "All locations" : staff.warehouse?.name} · {toISODate(start)} – {toISODate(endInclusive)}{" "}
+        (UTC)
         {carrierName ? ` · ${carrierName}` : ""}
       </p>
 

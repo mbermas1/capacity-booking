@@ -1,5 +1,6 @@
 import Link from "next/link";
 import { getStaffMember } from "@/lib/staff-session";
+import { canViewReports, getWarehouseScope, warehouseWhereClause } from "@/lib/staff-roles";
 import { prisma } from "@/lib/prisma";
 import { computeExceptionReport, type ExceptionRow } from "@/lib/reports";
 import { formatTime } from "@/lib/booking-display";
@@ -53,13 +54,18 @@ export default async function ExceptionReportPage({
 }) {
   const staff = await getStaffMember();
   if (!staff) return null;
+  if (!canViewReports(staff.role)) {
+    return <p className="text-sm text-zinc-600 dark:text-zinc-400">You don&apos;t have access to this page.</p>;
+  }
+  const scope = getWarehouseScope(staff);
+  const multiWarehouse = scope === null || scope.length > 1;
 
   const { start: startParam, end: endParam, carrierName: carrierNameParam } = await searchParams;
   const carrierName = carrierNameParam?.trim() || undefined;
   const { start, end, endInclusive } = parseRange(startParam, endParam, DEFAULT_RANGE_DAYS);
 
   const [rows, carriers] = await Promise.all([
-    computeExceptionReport(start, end, { carrierName, warehouseId: staff.warehouseId }),
+    computeExceptionReport(start, end, { carrierName, warehouseId: warehouseWhereClause(staff) }),
     prisma.carrier.findMany({ orderBy: { name: "asc" }, select: { name: true } }),
   ]);
 
@@ -150,7 +156,8 @@ export default async function ExceptionReportPage({
       </div>
 
       <p className="text-sm text-zinc-600 dark:text-zinc-400">
-        {staff.warehouse?.name} · {toISODate(start)} – {toISODate(endInclusive)} (UTC)
+        {multiWarehouse ? "All locations" : staff.warehouse?.name} · {toISODate(start)} – {toISODate(endInclusive)}{" "}
+        (UTC)
         {carrierName ? ` · ${carrierName}` : ""}
       </p>
 

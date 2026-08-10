@@ -35,5 +35,5 @@ export async function POST(request: NextRequest) {
 
   await createStaffSession(staff.id);
 
-  return NextResponse.json({ staff: { id: staff.id, name: staff.name, email: staff.email } });
+  return NextResponse.json({ staff: { id: staff.id, name: staff.name, email: staff.email, role: staff.role } });
 }

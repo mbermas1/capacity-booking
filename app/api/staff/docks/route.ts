@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { getStaffMember } from "@/lib/staff-session";
+import { canAccessWarehouse, canManageCapacityRules } from "@/lib/staff-roles";
 import { Prisma } from "@/app/generated/prisma/client";
 
 function isNonEmptyString(value: unknown): value is string {
@@ -32,6 +33,9 @@ export async function POST(request: NextRequest) {
   if (!staff) {
     return NextResponse.json({ error: "Not authenticated" }, { status: 401 });
   }
+  if (!canManageCapacityRules(staff.role)) {
+    return NextResponse.json({ error: "Forbidden" }, { status: 403 });
+  }
 
   let body: CreateStaffDockBody;
   try {
@@ -49,6 +53,8 @@ export async function POST(request: NextRequest) {
   if (!isNonEmptyString(body.equipmentType)) errors.push("equipmentType is required");
   if (body.warehouseId !== undefined && !isNonEmptyString(body.warehouseId)) {
     errors.push("warehouseId must be a non-empty string if provided");
+  } else if (isNonEmptyString(body.warehouseId) && !canAccessWarehouse(staff, body.warehouseId)) {
+    errors.push("warehouseId is not accessible to this account");
   }
   if (body.capacity !== undefined && !isPositiveInteger(body.capacity)) {
     errors.push("capacity must be a positive integer if provided");

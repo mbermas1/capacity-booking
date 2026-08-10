@@ -2,7 +2,7 @@ import { prisma } from "@/lib/prisma";
 import { detectNoShowMany } from "@/lib/bookings";
 import { computeUtilization } from "@/lib/utilization";
 
-type ReportFilter = { warehouseId?: string; carrierName?: string };
+type ReportFilter = { warehouseId?: string | { in: string[] }; carrierName?: string };
 
 // ---------------------------------------------------------------------------
 // Utilization report — capacity used vs. available, by door/day/hour.
@@ -109,24 +109,16 @@ export type DwellReportRow = {
 
 /**
  * Row-level by design — the printable report page aggregates this same
- * array (by day, by dock) rather than a second parallel function. When
- * filter.warehouseId is set, applies that warehouse's own detention rate;
- * unfiltered (all warehouses), detentionCost is always null since there's no
- * single rate to apply — computeMultiSiteRollup calls this once per
- * warehouse instead, so each gets its own rate.
+ * array (by day, by dock) rather than a second parallel function. Detention
+ * cost is looked up per-row from its own dock's warehouse, so this works the
+ * same whether filter.warehouseId scopes one warehouse, several (Facility
+ * Manager's assigned set), or is omitted entirely (all warehouses).
  */
 export async function computeDwellReport(
   rangeStart: Date,
   rangeEnd: Date,
   filter?: ReportFilter,
 ): Promise<DwellReportRow[]> {
-  const warehouse = filter?.warehouseId
-    ? await prisma.warehouse.findUnique({
-        where: { id: filter.warehouseId },
-        select: { detentionRatePerHour: true, detentionFreeMinutes: true },
-      })
-    : null;
-
   const bookings = await prisma.booking.findMany({
     where: {
       status: "COMPLETED",
@@ -136,16 +128,26 @@ export async function computeDwellReport(
       ...(filter?.carrierName ? { carrier: { name: filter.carrierName } } : {}),
       ...(filter?.warehouseId ? { dock: { warehouseId: filter.warehouseId } } : {}),
     },
-    include: { dock: { select: { name: true } }, carrier: { select: { name: true } } },
+    include: { dock: { select: { name: true, warehouseId: true } }, carrier: { select: { name: true } } },
     orderBy: { startTime: "asc" },
   });
 
-  const freeMinutes = warehouse?.detentionFreeMinutes ?? 0;
-  const rate = warehouse?.detentionRatePerHour ?? null;
+  const warehouseIds = Array.from(new Set(bookings.map((b) => b.dock.warehouseId)));
+  const warehouses =
+    warehouseIds.length > 0
+      ? await prisma.warehouse.findMany({
+          where: { id: { in: warehouseIds } },
+          select: { id: true, detentionRatePerHour: true, detentionFreeMinutes: true },
+        })
+      : [];
+  const warehouseById = new Map(warehouses.map((w) => [w.id, w]));
 
   return bookings.map((b) => {
     const scheduledMinutes = Math.round((b.endTime.getTime() - b.startTime.getTime()) / 60000);
     const actualMinutes = Math.round((b.completedAt!.getTime() - b.checkedInAt!.getTime()) / 60000);
+    const warehouse = warehouseById.get(b.dock.warehouseId);
+    const freeMinutes = warehouse?.detentionFreeMinutes ?? 0;
+    const rate = warehouse?.detentionRatePerHour ?? null;
     const detentionMinutes = Math.max(0, actualMinutes - freeMinutes);
     return {
       bookingId: b.id,
@@ -271,12 +273,17 @@ export type SiteRollupRow = {
 };
 
 /**
- * Unscoped by design — any logged-in staff can view this one report across
- * every warehouse, unlike every other page's staff.warehouseId filter (no
- * role/permission tier exists in this app to gate it more tightly yet).
+ * Admin/Analyst call this unfiltered (every warehouse); Facility Manager
+ * passes their assigned warehouseIds so the rollup only compares the sites
+ * they can actually see.
  */
-export async function computeMultiSiteRollup(rangeStart: Date, rangeEnd: Date): Promise<SiteRollupRow[]> {
+export async function computeMultiSiteRollup(
+  rangeStart: Date,
+  rangeEnd: Date,
+  filter?: { warehouseIds?: string[] },
+): Promise<SiteRollupRow[]> {
   const warehouses = await prisma.warehouse.findMany({
+    where: filter?.warehouseIds ? { id: { in: filter.warehouseIds } } : undefined,
     include: { _count: { select: { docks: true } } },
     orderBy: { name: "asc" },
   });

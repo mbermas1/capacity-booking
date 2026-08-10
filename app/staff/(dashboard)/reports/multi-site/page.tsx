@@ -1,5 +1,6 @@
 import Link from "next/link";
 import { getStaffMember } from "@/lib/staff-session";
+import { canViewReports, getWarehouseScope } from "@/lib/staff-roles";
 import { computeMultiSiteRollup } from "@/lib/reports";
 
 const DAY_MS = 24 * 60 * 60 * 1000;
@@ -39,11 +40,15 @@ export default async function MultiSiteReportPage({
 }) {
   const staff = await getStaffMember();
   if (!staff) return null;
+  if (!canViewReports(staff.role)) {
+    return <p className="text-sm text-zinc-600 dark:text-zinc-400">You don&apos;t have access to this page.</p>;
+  }
+  const scope = getWarehouseScope(staff);
 
   const { start: startParam, end: endParam } = await searchParams;
   const { start, end, endInclusive } = parseRange(startParam, endParam, DEFAULT_RANGE_DAYS);
 
-  const rows = await computeMultiSiteRollup(start, end);
+  const rows = await computeMultiSiteRollup(start, end, scope === null ? undefined : { warehouseIds: scope });
 
   const csvHref = `/api/staff/reports/multi-site/export${buildQuery({
     start: toISODate(start),
@@ -117,13 +122,15 @@ export default async function MultiSiteReportPage({
           Export CSV
         </a>
         <span className="text-xs text-zinc-500 dark:text-zinc-400">
-          To save as PDF, use your browser&rsquo;s Print (Ctrl/Cmd+P). Shows every facility, not just{" "}
-          {staff.warehouse?.name}.
+          To save as PDF, use your browser&rsquo;s Print (Ctrl/Cmd+P).{" "}
+          {scope === null
+            ? `Shows every facility, not just ${staff.warehouse?.name}.`
+            : "Shows the facilities assigned to your account."}
         </span>
       </div>
 
       <p className="text-sm text-zinc-600 dark:text-zinc-400">
-        {toISODate(start)} – {toISODate(endInclusive)} (UTC) · all facilities
+        {toISODate(start)} – {toISODate(endInclusive)} (UTC) · {scope === null ? "all facilities" : "your facilities"}
       </p>
 
       {rows.length === 0 ? (

@@ -1,15 +1,24 @@
 import { PrismaBetterSqlite3 } from "@prisma/adapter-better-sqlite3";
-import { PrismaClient } from "../app/generated/prisma/client.ts";
+import { PrismaClient, StaffRole } from "../app/generated/prisma/client.ts";
 import { hashPassword } from "../lib/portal-auth.ts";
 
+const VALID_ROLES = Object.values(StaffRole) as string[];
+
 async function main() {
-  const [, , name, email, password, warehouseName] = process.argv;
+  const [, , name, email, password, warehouseName, roleArg] = process.argv;
   if (!name || !email || !password) {
     console.error(
-      "Usage: npx tsx scripts/create-staff-account.ts <name> <email> <password> [warehouseName]",
+      "Usage: npx tsx scripts/create-staff-account.ts <name> <email> <password> [warehouseName] [role]",
     );
+    console.error(`role defaults to ADMIN on first creation; one of: ${VALID_ROLES.join(", ")}`);
     process.exit(1);
   }
+
+  if (roleArg && !VALID_ROLES.includes(roleArg)) {
+    console.error(`Invalid role "${roleArg}". Must be one of: ${VALID_ROLES.join(", ")}`);
+    process.exit(1);
+  }
+  const role = (roleArg as StaffRole | undefined) ?? "ADMIN";
 
   const adapter = new PrismaBetterSqlite3({ url: process.env.DATABASE_URL ?? "file:./dev.db" });
   const prisma = new PrismaClient({ adapter });
@@ -29,11 +38,13 @@ async function main() {
 
   const staff = await prisma.staff.upsert({
     where: { email },
-    create: { name, email, passwordHash: hashPassword(password), warehouseId: warehouse.id },
-    update: { name, passwordHash: hashPassword(password) },
+    create: { name, email, passwordHash: hashPassword(password), warehouseId: warehouse.id, role },
+    update: { name, passwordHash: hashPassword(password), ...(roleArg ? { role } : {}) },
   });
 
-  console.log(`Staff account ready: ${staff.name} <${staff.email}> (warehouse: ${warehouse.name}, id: ${staff.id})`);
+  console.log(
+    `Staff account ready: ${staff.name} <${staff.email}> (warehouse: ${warehouse.name}, role: ${staff.role}, id: ${staff.id})`,
+  );
   await prisma.$disconnect();
 }
 

@@ -3,7 +3,16 @@ import { notFound } from "next/navigation";
 import { revalidatePath } from "next/cache";
 import { prisma } from "@/lib/prisma";
 import { TagCategory } from "@/app/generated/prisma/client";
+import { getStaffMember } from "@/lib/staff-session";
+import { canAccessWarehouse, canManageCapacityRules } from "@/lib/staff-roles";
 import { computeDockDwellStats, computeDockDwellTrend } from "@/lib/dock-dwell";
+
+async function assertDockAccess(dockId: string): Promise<boolean> {
+  const staff = await getStaffMember();
+  if (!staff || !canManageCapacityRules(staff.role)) return false;
+  const dock = await prisma.dock.findUnique({ where: { id: dockId }, select: { warehouseId: true } });
+  return dock !== null && canAccessWarehouse(staff, dock.warehouseId);
+}
 
 const DAY_NAMES = ["Sunday", "Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday"];
 
@@ -22,6 +31,8 @@ function parseOptionalNonNegativeInt(raw: string): number | null {
 
 async function updateDockDetails(dockId: string, formData: FormData) {
   "use server";
+
+  if (!(await assertDockAccess(dockId))) return;
 
   const name = String(formData.get("name") ?? "").trim();
   const location = String(formData.get("location") ?? "").trim();
@@ -53,6 +64,8 @@ async function updateDockDetails(dockId: string, formData: FormData) {
 
 async function updateHours(dockId: string, formData: FormData) {
   "use server";
+
+  if (!(await assertDockAccess(dockId))) return;
 
   const entries: { dayOfWeek: number; closed: boolean; openTime: string | null; closeTime: string | null }[] = [];
   const daysToKeep: number[] = [];
@@ -89,6 +102,8 @@ async function updateHours(dockId: string, formData: FormData) {
 async function updateTags(dockId: string, category: TagCategory, formData: FormData) {
   "use server";
 
+  if (!(await assertDockAccess(dockId))) return;
+
   const selectedTagIds = formData.getAll("tagIds").map(String);
 
   await prisma.$transaction(async (tx) => {
@@ -106,6 +121,9 @@ async function updateTags(dockId: string, category: TagCategory, formData: FormD
 export default async function StaffDockDetailPage({ params }: { params: Promise<{ id: string }> }) {
   const { id: dockId } = await params;
 
+  const staff = await getStaffMember();
+  if (!staff) return null;
+
   const dock = await prisma.dock.findUnique({
     where: { id: dockId },
     include: {
@@ -115,6 +133,9 @@ export default async function StaffDockDetailPage({ params }: { params: Promise<
   });
 
   if (!dock) notFound();
+  if (!canManageCapacityRules(staff.role) || !canAccessWarehouse(staff, dock.warehouseId)) {
+    return <p className="text-sm text-zinc-600 dark:text-zinc-400">You don&apos;t have access to this page.</p>;
+  }
 
   const allTags = await prisma.tag.findMany({ orderBy: { name: "asc" } });
   const hoursByDay = new Map(dock.operatingHours.map((h) => [h.dayOfWeek, h]));

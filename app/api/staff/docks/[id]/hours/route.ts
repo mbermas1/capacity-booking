@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
-import { getStaffSession } from "@/lib/staff-session";
+import { getStaffMember } from "@/lib/staff-session";
+import { canAccessWarehouse, canManageCapacityRules } from "@/lib/staff-roles";
 
 type HoursEntry = {
   dayOfWeek?: unknown;
@@ -17,9 +18,12 @@ export async function PATCH(
   request: NextRequest,
   { params }: { params: Promise<{ id: string }> },
 ) {
-  const session = await getStaffSession();
-  if (!session) {
+  const staff = await getStaffMember();
+  if (!staff) {
     return NextResponse.json({ error: "Not authenticated" }, { status: 401 });
+  }
+  if (!canManageCapacityRules(staff.role)) {
+    return NextResponse.json({ error: "Forbidden" }, { status: 403 });
   }
 
   const { id: dockId } = await params;
@@ -91,6 +95,9 @@ export async function PATCH(
   const dock = await prisma.dock.findUnique({ where: { id: dockId } });
   if (!dock) {
     return NextResponse.json({ error: "Dock not found" }, { status: 404 });
+  }
+  if (!canAccessWarehouse(staff, dock.warehouseId)) {
+    return NextResponse.json({ error: "Forbidden" }, { status: 403 });
   }
 
   await prisma.$transaction(async (tx) => {

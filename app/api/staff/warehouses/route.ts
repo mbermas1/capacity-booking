@@ -1,7 +1,8 @@
 import { NextRequest, NextResponse } from "next/server";
 import { randomBytes } from "node:crypto";
 import { prisma } from "@/lib/prisma";
-import { getStaffSession } from "@/lib/staff-session";
+import { getStaffMember, getStaffSession } from "@/lib/staff-session";
+import { canCreateWarehouse } from "@/lib/staff-roles";
 
 function isNonEmptyString(value: unknown): value is string {
   return typeof value === "string" && value.trim().length > 0;
@@ -23,9 +24,12 @@ type CreateWarehouseBody = {
 };
 
 export async function POST(request: NextRequest) {
-  const session = await getStaffSession();
-  if (!session) {
+  const staff = await getStaffMember();
+  if (!staff) {
     return NextResponse.json({ error: "Not authenticated" }, { status: 401 });
+  }
+  if (!canCreateWarehouse(staff.role)) {
+    return NextResponse.json({ error: "Forbidden" }, { status: 403 });
   }
 
   let body: CreateWarehouseBody;

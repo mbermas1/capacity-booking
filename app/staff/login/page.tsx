@@ -1,5 +1,6 @@
 import { redirect } from "next/navigation";
 import { authenticateStaff, createStaffSession } from "@/lib/staff-session";
+import { landingPathForRole } from "@/lib/staff-roles";
 
 async function login(formData: FormData) {
   "use server";
@@ -17,7 +18,7 @@ async function login(formData: FormData) {
   }
 
   await createStaffSession(staff.id);
-  redirect("/staff");
+  redirect(landingPathForRole(staff.role));
 }
 
 export default async function StaffLoginPage({

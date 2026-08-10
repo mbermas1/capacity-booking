@@ -1,6 +1,8 @@
 import { revalidatePath } from "next/cache";
 import { prisma } from "@/lib/prisma";
 import { hashPassword } from "@/lib/portal-auth";
+import { getStaffMember } from "@/lib/staff-session";
+import { canManageCarrierAccounts } from "@/lib/staff-roles";
 import { PartnerType } from "@/app/generated/prisma/client";
 import { PARTNER_TYPE_LABELS } from "@/lib/partner-type";
 import { computeCarrierScore, computeCarrierScoreTrend, type CarrierScore } from "@/lib/carrier-score";
@@ -48,6 +50,9 @@ function ComponentTrendRow({
 async function createCarrierAccount(formData: FormData) {
   "use server";
 
+  const staff = await getStaffMember();
+  if (!staff || !canManageCarrierAccounts(staff.role)) return;
+
   const name = String(formData.get("name") ?? "").trim();
   const email = String(formData.get("email") ?? "").trim();
   const password = String(formData.get("password") ?? "");
@@ -70,6 +75,9 @@ async function createCarrierAccount(formData: FormData) {
 async function updateCarrierRequirementTags(carrierId: string, formData: FormData) {
   "use server";
 
+  const staff = await getStaffMember();
+  if (!staff || !canManageCarrierAccounts(staff.role)) return;
+
   const selectedTagIds = formData.getAll("tagIds").map(String);
 
   await prisma.$transaction(async (tx) => {
@@ -83,6 +91,13 @@ async function updateCarrierRequirementTags(carrierId: string, formData: FormDat
 }
 
 export default async function StaffCarriersPage() {
+  const staff = await getStaffMember();
+  if (!staff) return null;
+  if (staff.role === "DOCK_STAFF") {
+    return <p className="text-sm text-zinc-600 dark:text-zinc-400">You don&apos;t have access to this page.</p>;
+  }
+  const canManage = canManageCarrierAccounts(staff.role);
+
   const [carriers, requirementTags] = await Promise.all([
     prisma.carrier.findMany({
       orderBy: { name: "asc" },
@@ -99,6 +114,7 @@ export default async function StaffCarriersPage() {
 
   return (
     <div className="flex flex-col gap-8">
+      {canManage && (
       <section>
         <h1 className="mb-4 text-xl font-semibold text-black dark:text-zinc-50">
           Create or Reset a Carrier Account
@@ -179,6 +195,7 @@ export default async function StaffCarriersPage() {
           rather than creating a duplicate.
         </p>
       </section>
+      )}
 
       <section>
         <h2 className="mb-3 text-lg font-medium text-black dark:text-zinc-50">All Carriers</h2>
@@ -263,7 +280,7 @@ export default async function StaffCarriersPage() {
                       />
                     </div>
                   </details>
-                  {requirementTags.length > 0 && (
+                  {canManage && requirementTags.length > 0 && (
                     <form
                       action={updateCarrierRequirementTags.bind(null, carrier.id)}
                       className="flex flex-wrap items-center gap-3"

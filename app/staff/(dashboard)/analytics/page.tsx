@@ -1,6 +1,7 @@
 import Link from "next/link";
 import { prisma } from "@/lib/prisma";
 import { getStaffMember } from "@/lib/staff-session";
+import { canViewReports, getWarehouseScope, warehouseWhereClause } from "@/lib/staff-roles";
 import { computeUtilization, computeUtilizationTrend } from "@/lib/utilization";
 import { computeDockDwellStats, computeDockDwellTrend } from "@/lib/dock-dwell";
 import { computeCarrierScore, computeCarrierScoreTrend, type CarrierScore } from "@/lib/carrier-score";
@@ -89,6 +90,11 @@ export default async function StaffAnalyticsPage({
 }) {
   const staff = await getStaffMember();
   if (!staff) return null;
+  if (!canViewReports(staff.role)) {
+    return <p className="text-sm text-zinc-600 dark:text-zinc-400">You don&apos;t have access to this page.</p>;
+  }
+  const scope = getWarehouseScope(staff);
+  const multiWarehouse = scope === null || scope.length > 1;
 
   const { date: dateParam, carrierName: carrierNameParam, days: daysParam } = await searchParams;
   const carrierName = carrierNameParam?.trim() || undefined;
@@ -104,10 +110,14 @@ export default async function StaffAnalyticsPage({
   const trendWindowStart = toISODate(new Date(dayStart.getTime() - (trendDays - 1) * 24 * 60 * 60 * 1000));
 
   const [stats, carriers, trend, allDocks] = await Promise.all([
-    computeUtilization(dayStart, dayEnd, { carrierName, warehouseId: staff.warehouseId }),
+    computeUtilization(dayStart, dayEnd, { carrierName, warehouseId: warehouseWhereClause(staff) }),
     prisma.carrier.findMany({ orderBy: { name: "asc" }, select: { name: true } }),
-    computeUtilizationTrend(dayStart, trendDays, { carrierName, warehouseId: staff.warehouseId }),
-    prisma.dock.findMany({ where: { warehouseId: staff.warehouseId }, orderBy: { name: "asc" } }),
+    computeUtilizationTrend(dayStart, trendDays, { carrierName, warehouseId: warehouseWhereClause(staff) }),
+    prisma.dock.findMany({
+      where: { warehouseId: warehouseWhereClause(staff) },
+      orderBy: { name: "asc" },
+      include: { warehouse: { select: { name: true } } },
+    }),
   ]);
 
   const dwellStats = new Map(
@@ -155,7 +165,8 @@ export default async function StaffAnalyticsPage({
           <div>
             <h1 className="text-xl font-semibold text-black dark:text-zinc-50">Dock Utilization</h1>
             <p className="text-sm text-zinc-600 dark:text-zinc-400">
-              {staff.warehouse?.name} on {dateStr} (UTC){carrierName ? ` · ${carrierName}` : ""}
+              {multiWarehouse ? "All locations" : staff.warehouse?.name} on {dateStr} (UTC)
+              {carrierName ? ` · ${carrierName}` : ""}
             </p>
           </div>
           <div className="flex items-center gap-2">
@@ -427,7 +438,10 @@ export default async function StaffAnalyticsPage({
               const maxDwell = Math.max(1, ...dwellTrend.map((b) => b.averageDwellMinutes ?? 0));
               return (
                 <li key={dock.id} className="flex flex-col gap-2 py-3">
-                  <span className="text-sm font-medium text-black dark:text-zinc-50">{dock.name}</span>
+                  <span className="text-sm font-medium text-black dark:text-zinc-50">
+                    {multiWarehouse && `${dock.warehouse.name} · `}
+                    {dock.name}
+                  </span>
                   <span className="text-xs text-zinc-500 dark:text-zinc-400">
                     {dwell.averageDwellMinutes !== null
                       ? `Avg dwell: ${Math.round(dwell.averageDwellMinutes)} min (scheduled: ${Math.round(dwell.averageScheduledMinutes!)} min) · ${dwell.sampleSize} completed bookings`

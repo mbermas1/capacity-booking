@@ -1,5 +1,6 @@
 import Link from "next/link";
 import { getStaffMember } from "@/lib/staff-session";
+import { canViewReports } from "@/lib/staff-roles";
 
 const REPORTS = [
   {
@@ -27,6 +28,9 @@ const REPORTS = [
 export default async function StaffReportsIndexPage() {
   const staff = await getStaffMember();
   if (!staff) return null;
+  if (!canViewReports(staff.role)) {
+    return <p className="text-sm text-zinc-600 dark:text-zinc-400">You don&apos;t have access to this page.</p>;
+  }
 
   return (
     <div className="flex flex-col gap-8">

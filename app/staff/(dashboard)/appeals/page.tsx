@@ -1,6 +1,7 @@
 import { redirect } from "next/navigation";
 import { prisma } from "@/lib/prisma";
 import { getStaffMember } from "@/lib/staff-session";
+import { canResolveAppeals } from "@/lib/staff-roles";
 
 function formatDateTime(date: Date): string {
   return new Intl.DateTimeFormat("en-US", {
@@ -17,7 +18,7 @@ async function resolveAppeal(appealId: string, formData: FormData) {
   "use server";
 
   const staff = await getStaffMember();
-  if (!staff) return;
+  if (!staff || !canResolveAppeals(staff.role)) return;
 
   const appeal = await prisma.scoreAppeal.findUnique({ where: { id: appealId } });
   if (!appeal || appeal.resolvedAt) return;
@@ -35,6 +36,9 @@ async function resolveAppeal(appealId: string, formData: FormData) {
 export default async function StaffAppealsPage() {
   const staff = await getStaffMember();
   if (!staff) return null;
+  if (!canResolveAppeals(staff.role)) {
+    return <p className="text-sm text-zinc-600 dark:text-zinc-400">You don&apos;t have access to this page.</p>;
+  }
 
   const appeals = await prisma.scoreAppeal.findMany({
     include: { carrier: { select: { name: true } } },

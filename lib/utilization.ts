@@ -16,7 +16,7 @@ export type DockUtilization = {
 export async function computeUtilization(
   rangeStart: Date,
   rangeEnd: Date,
-  filter?: { dockId?: string; carrierName?: string; warehouseId?: string },
+  filter?: { dockId?: string; carrierName?: string; warehouseId?: string | { in: string[] } },
 ): Promise<DockUtilization[]> {
   const rangeMs = rangeEnd.getTime() - rangeStart.getTime();
 
@@ -83,7 +83,7 @@ export type DockUtilizationTrend = {
 export async function computeUtilizationTrend(
   endDate: Date, // inclusive last day of the window, 00:00 UTC boundary
   numDays: number,
-  filter?: { carrierName?: string; warehouseId?: string },
+  filter?: { carrierName?: string; warehouseId?: string | { in: string[] } },
 ): Promise<DockUtilizationTrend[]> {
   const dayMs = 24 * 60 * 60 * 1000;
   const windowStart = new Date(endDate.getTime() - (numDays - 1) * dayMs);

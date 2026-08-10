@@ -2,24 +2,27 @@ import Link from "next/link";
 import { revalidatePath } from "next/cache";
 import { prisma } from "@/lib/prisma";
 import { getStaffMember } from "@/lib/staff-session";
+import { canAccessWarehouse, canManageCapacityRules, getWarehouseScope, warehouseWhereClause } from "@/lib/staff-roles";
 import { computeDockDwellStats, computeDockDwellTrend } from "@/lib/dock-dwell";
 
 async function createDock(formData: FormData) {
   "use server";
 
   const staff = await getStaffMember();
-  if (!staff) return;
+  if (!staff || !canManageCapacityRules(staff.role)) return;
 
   const name = String(formData.get("name") ?? "").trim();
   const location = String(formData.get("location") ?? "").trim();
   const equipmentType = String(formData.get("equipmentType") ?? "").trim();
   const capacityRaw = String(formData.get("capacity") ?? "").trim();
   const capacity = Number.isInteger(Number(capacityRaw)) && Number(capacityRaw) >= 1 ? Number(capacityRaw) : 1;
+  const warehouseIdRaw = String(formData.get("warehouseId") ?? "").trim();
+  const warehouseId = warehouseIdRaw && canAccessWarehouse(staff, warehouseIdRaw) ? warehouseIdRaw : staff.warehouseId;
 
   if (!name || !location || !equipmentType) return;
 
   await prisma.dock.create({
-    data: { name, location, equipmentType, capacity, warehouseId: staff.warehouseId },
+    data: { name, location, equipmentType, capacity, warehouseId },
   });
 
   revalidatePath("/staff/docks");
@@ -28,11 +31,20 @@ async function createDock(formData: FormData) {
 export default async function StaffDocksPage() {
   const staff = await getStaffMember();
   if (!staff) return null;
+  if (!canManageCapacityRules(staff.role)) {
+    return <p className="text-sm text-zinc-600 dark:text-zinc-400">You don&apos;t have access to this page.</p>;
+  }
+
+  const scope = getWarehouseScope(staff);
+  const accessibleWarehouses = await prisma.warehouse.findMany({
+    where: scope === null ? {} : { id: { in: scope } },
+    orderBy: { name: "asc" },
+  });
 
   const docks = await prisma.dock.findMany({
-    where: { warehouseId: staff.warehouseId },
+    where: { warehouseId: warehouseWhereClause(staff) },
     orderBy: { name: "asc" },
-    include: { _count: { select: { bookings: true, operatingHours: true, tags: true } } },
+    include: { warehouse: { select: { name: true } }, _count: { select: { bookings: true, operatingHours: true, tags: true } } },
   });
   const dwellStats = new Map(
     await Promise.all(docks.map(async (d) => [d.id, await computeDockDwellStats(d.id)] as const)),
@@ -98,6 +110,25 @@ export default async function StaffDocksPage() {
               className="h-10 w-24 rounded-lg border border-black/[.08] bg-white px-3 text-sm text-black dark:border-white/[.145] dark:bg-black dark:text-zinc-50"
             />
           </div>
+          {accessibleWarehouses.length > 1 && (
+            <div className="flex flex-col gap-1">
+              <label htmlFor="warehouseId" className="text-sm font-medium text-zinc-700 dark:text-zinc-300">
+                Location
+              </label>
+              <select
+                id="warehouseId"
+                name="warehouseId"
+                defaultValue={staff.warehouseId}
+                className="h-10 rounded-lg border border-black/[.08] bg-white px-3 text-sm text-black dark:border-white/[.145] dark:bg-black dark:text-zinc-50"
+              >
+                {accessibleWarehouses.map((w) => (
+                  <option key={w.id} value={w.id}>
+                    {w.name}
+                  </option>
+                ))}
+              </select>
+            </div>
+          )}
           <button
             type="submit"
             className="h-10 rounded-full bg-foreground px-4 text-sm font-medium text-background transition-colors hover:bg-[#383838] dark:hover:bg-[#ccc]"
@@ -108,7 +139,9 @@ export default async function StaffDocksPage() {
       </section>
 
       <section>
-        <h2 className="mb-3 text-lg font-medium text-black dark:text-zinc-50">Docks at {staff.warehouse?.name}</h2>
+        <h2 className="mb-3 text-lg font-medium text-black dark:text-zinc-50">
+          {accessibleWarehouses.length > 1 ? "Docks" : `Docks at ${staff.warehouse?.name}`}
+        </h2>
         {docks.length === 0 ? (
           <p className="text-sm text-zinc-500 dark:text-zinc-500">No docks yet.</p>
         ) : (
@@ -128,6 +161,7 @@ export default async function StaffDocksPage() {
                       {dock.name}
                     </Link>
                     <span className="text-xs text-zinc-500 dark:text-zinc-400">
+                      {accessibleWarehouses.length > 1 && `${dock.warehouse.name} · `}
                       {dock.location} · {dock.equipmentType} · capacity {dock.capacity} · {dock._count.bookings} booking
                       {dock._count.bookings === 1 ? "" : "s"}
                       {dwell.averageDwellMinutes !== null && ` · avg dwell ${Math.round(dwell.averageDwellMinutes)} min`}

@@ -2,6 +2,15 @@ import Link from "next/link";
 import { cookies } from "next/headers";
 import { redirect } from "next/navigation";
 import { getStaffMember, requireStaffSession, STAFF_SESSION_COOKIE } from "@/lib/staff-session";
+import {
+  canApproveRequests,
+  canManageCapacityRules,
+  canManageStaff,
+  canManageTagDefinitions,
+  canOperateSchedule,
+  canResolveAppeals,
+  canViewReports,
+} from "@/lib/staff-roles";
 
 async function logout() {
   "use server";
@@ -36,30 +45,51 @@ export default async function StaffDashboardLayout({ children }: { children: Rea
             </div>
           </div>
           <nav className="flex items-center gap-4 text-sm font-medium text-zinc-600 dark:text-zinc-400">
-            <Link href="/staff" className="hover:text-black dark:hover:text-zinc-50">
-              Carriers
-            </Link>
-            <Link href="/staff/docks" className="hover:text-black dark:hover:text-zinc-50">
-              Docks
-            </Link>
-            <Link href="/staff/schedule" className="hover:text-black dark:hover:text-zinc-50">
-              Schedule
-            </Link>
-            <Link href="/staff/requests" className="hover:text-black dark:hover:text-zinc-50">
-              Requests
-            </Link>
-            <Link href="/staff/appeals" className="hover:text-black dark:hover:text-zinc-50">
-              Appeals
-            </Link>
-            <Link href="/staff/analytics" className="hover:text-black dark:hover:text-zinc-50">
-              Analytics
-            </Link>
-            <Link href="/staff/reports" className="hover:text-black dark:hover:text-zinc-50">
-              Reports
-            </Link>
-            <Link href="/staff/tags" className="hover:text-black dark:hover:text-zinc-50">
-              Tags
-            </Link>
+            {staff && staff.role !== "DOCK_STAFF" && (
+              <Link href="/staff" className="hover:text-black dark:hover:text-zinc-50">
+                Carriers
+              </Link>
+            )}
+            {staff && canManageCapacityRules(staff.role) && (
+              <Link href="/staff/docks" className="hover:text-black dark:hover:text-zinc-50">
+                Docks
+              </Link>
+            )}
+            {staff && canOperateSchedule(staff.role) && (
+              <Link href="/staff/schedule" className="hover:text-black dark:hover:text-zinc-50">
+                Schedule
+              </Link>
+            )}
+            {staff && canApproveRequests(staff.role) && (
+              <Link href="/staff/requests" className="hover:text-black dark:hover:text-zinc-50">
+                Requests
+              </Link>
+            )}
+            {staff && canResolveAppeals(staff.role) && (
+              <Link href="/staff/appeals" className="hover:text-black dark:hover:text-zinc-50">
+                Appeals
+              </Link>
+            )}
+            {staff && canViewReports(staff.role) && (
+              <Link href="/staff/analytics" className="hover:text-black dark:hover:text-zinc-50">
+                Analytics
+              </Link>
+            )}
+            {staff && canViewReports(staff.role) && (
+              <Link href="/staff/reports" className="hover:text-black dark:hover:text-zinc-50">
+                Reports
+              </Link>
+            )}
+            {staff && canManageTagDefinitions(staff.role) && (
+              <Link href="/staff/tags" className="hover:text-black dark:hover:text-zinc-50">
+                Tags
+              </Link>
+            )}
+            {staff && canManageStaff(staff.role) && (
+              <Link href="/staff/team" className="hover:text-black dark:hover:text-zinc-50">
+                Team
+              </Link>
+            )}
           </nav>
         </div>
       </header>

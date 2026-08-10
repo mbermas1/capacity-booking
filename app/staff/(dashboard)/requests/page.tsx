@@ -2,6 +2,7 @@ import { redirect } from "next/navigation";
 import { randomBytes } from "node:crypto";
 import { prisma } from "@/lib/prisma";
 import { getStaffMember } from "@/lib/staff-session";
+import { canAccessWarehouse, canApproveRequests, getWarehouseScope, warehouseWhereClause } from "@/lib/staff-roles";
 import { formatTime } from "@/lib/booking-display";
 import {
   BookingOverlapError,
@@ -29,10 +30,14 @@ async function approveRequest(requestId: string) {
   "use server";
 
   const staff = await getStaffMember();
-  if (!staff) return;
+  if (!staff || !canApproveRequests(staff.role)) return;
 
   const bookingRequest = await prisma.bookingRequest.findUnique({ where: { id: requestId } });
-  if (!bookingRequest || bookingRequest.warehouseId !== staff.warehouseId || bookingRequest.status !== "PENDING") {
+  if (
+    !bookingRequest ||
+    !canAccessWarehouse(staff, bookingRequest.warehouseId) ||
+    bookingRequest.status !== "PENDING"
+  ) {
     return;
   }
 
@@ -83,10 +88,14 @@ async function rejectRequest(requestId: string, formData: FormData) {
   "use server";
 
   const staff = await getStaffMember();
-  if (!staff) return;
+  if (!staff || !canApproveRequests(staff.role)) return;
 
   const bookingRequest = await prisma.bookingRequest.findUnique({ where: { id: requestId } });
-  if (!bookingRequest || bookingRequest.warehouseId !== staff.warehouseId || bookingRequest.status !== "PENDING") {
+  if (
+    !bookingRequest ||
+    !canAccessWarehouse(staff, bookingRequest.warehouseId) ||
+    bookingRequest.status !== "PENDING"
+  ) {
     return;
   }
 
@@ -100,14 +109,14 @@ async function rejectRequest(requestId: string, formData: FormData) {
   redirect("/staff/requests?message=Request rejected.");
 }
 
-async function regenerateLink() {
+async function regenerateLink(warehouseId: string) {
   "use server";
 
   const staff = await getStaffMember();
-  if (!staff) return;
+  if (!staff || !canApproveRequests(staff.role) || !canAccessWarehouse(staff, warehouseId)) return;
 
   const publicBookingSlug = randomBytes(16).toString("hex");
-  await prisma.warehouse.update({ where: { id: staff.warehouseId }, data: { publicBookingSlug } });
+  await prisma.warehouse.update({ where: { id: warehouseId }, data: { publicBookingSlug } });
 
   redirect("/staff/requests?message=Link regenerated. The old link no longer works.");
 }
@@ -119,12 +128,21 @@ export default async function StaffRequestsPage({
 }) {
   const staff = await getStaffMember();
   if (!staff) return null;
+  if (!canApproveRequests(staff.role)) {
+    return <p className="text-sm text-zinc-600 dark:text-zinc-400">You don&apos;t have access to this page.</p>;
+  }
 
   const { message, error } = await searchParams;
 
+  const scope = getWarehouseScope(staff);
+  const accessibleWarehouses = await prisma.warehouse.findMany({
+    where: scope === null ? {} : { id: { in: scope } },
+    orderBy: { name: "asc" },
+  });
+
   const requests = await prisma.bookingRequest.findMany({
-    where: { warehouseId: staff.warehouseId },
-    include: { dock: true },
+    where: { warehouseId: warehouseWhereClause(staff) },
+    include: { dock: { include: { warehouse: { select: { name: true } } } } },
     orderBy: { createdAt: "desc" },
   });
 
@@ -146,18 +164,31 @@ export default async function StaffRequestsPage({
 
       <section>
         <h2 className="mb-2 text-sm font-medium text-zinc-700 dark:text-zinc-300">Public Booking Link</h2>
-        <div className="flex flex-wrap items-center gap-3 rounded-2xl border border-black/[.08] bg-white p-4 dark:border-white/[.145] dark:bg-[#0a0a0a]">
-          <code className="rounded-lg bg-zinc-100 px-3 py-2 text-sm text-black dark:bg-zinc-900 dark:text-zinc-50">
-            /book/{staff.warehouse.publicBookingSlug}
-          </code>
-          <form action={regenerateLink}>
-            <button
-              type="submit"
-              className="h-9 rounded-full border border-black/[.08] px-4 text-sm font-medium transition-colors hover:bg-black/[.04] dark:border-white/[.145] dark:hover:bg-[#1a1a1a]"
-            >
-              Regenerate Link
-            </button>
-          </form>
+        <div className="flex flex-col gap-3">
+          {accessibleWarehouses.map((w) => {
+            const boundRegenerate = regenerateLink.bind(null, w.id);
+            return (
+              <div
+                key={w.id}
+                className="flex flex-wrap items-center gap-3 rounded-2xl border border-black/[.08] bg-white p-4 dark:border-white/[.145] dark:bg-[#0a0a0a]"
+              >
+                {accessibleWarehouses.length > 1 && (
+                  <span className="text-sm font-medium text-black dark:text-zinc-50">{w.name}</span>
+                )}
+                <code className="rounded-lg bg-zinc-100 px-3 py-2 text-sm text-black dark:bg-zinc-900 dark:text-zinc-50">
+                  /book/{w.publicBookingSlug}
+                </code>
+                <form action={boundRegenerate}>
+                  <button
+                    type="submit"
+                    className="h-9 rounded-full border border-black/[.08] px-4 text-sm font-medium transition-colors hover:bg-black/[.04] dark:border-white/[.145] dark:hover:bg-[#1a1a1a]"
+                  >
+                    Regenerate Link
+                  </button>
+                </form>
+              </div>
+            );
+          })}
         </div>
         <p className="mt-2 text-xs text-zinc-500 dark:text-zinc-500">
           Anyone with this link can view open capacity and submit a request — no login required. Regenerating
@@ -182,7 +213,8 @@ export default async function StaffRequestsPage({
                   <div className="flex flex-wrap items-start justify-between gap-2">
                     <div className="flex flex-col gap-1">
                       <span className="text-sm font-medium text-black dark:text-zinc-50">
-                        {r.companyName} · {r.dock.name}
+                        {r.companyName} · {accessibleWarehouses.length > 1 && `${r.dock.warehouse.name} · `}
+                        {r.dock.name}
                       </span>
                       <span className="font-mono text-xs text-zinc-500 dark:text-zinc-400">
                         {formatDate(r.startTime)} · {formatTime(r.startTime)}–{formatTime(r.endTime)}

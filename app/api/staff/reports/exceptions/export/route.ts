@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { getStaffMember } from "@/lib/staff-session";
+import { canViewReports, warehouseWhereClause } from "@/lib/staff-roles";
 import { computeExceptionReport } from "@/lib/reports";
 import { toCsv } from "@/lib/csv";
 
@@ -13,6 +14,9 @@ export async function GET(request: NextRequest) {
   const staff = await getStaffMember();
   if (!staff) {
     return NextResponse.json({ error: "Not authenticated" }, { status: 401 });
+  }
+  if (!canViewReports(staff.role)) {
+    return NextResponse.json({ error: "Forbidden" }, { status: 403 });
   }
 
   const searchParams = request.nextUrl.searchParams;
@@ -29,7 +33,10 @@ export async function GET(request: NextRequest) {
   const dayMs = 24 * 60 * 60 * 1000;
   const end = new Date(endInclusive.getTime() + dayMs);
 
-  const rows = await computeExceptionReport(startInclusive, end, { carrierName, warehouseId: staff.warehouseId });
+  const rows = await computeExceptionReport(startInclusive, end, {
+    carrierName,
+    warehouseId: warehouseWhereClause(staff),
+  });
 
   const csv = toCsv(
     ["Type", "Scheduled Start", "Scheduled End", "Dock", "Carrier", "Reference", "Detail"],

@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
-import { getStaffSession } from "@/lib/staff-session";
+import { getStaffMember, getStaffSession } from "@/lib/staff-session";
+import { canManageTagDefinitions } from "@/lib/staff-roles";
 import { TagCategory, Prisma } from "@/app/generated/prisma/client";
 
 function isNonEmptyString(value: unknown): value is string {
@@ -38,9 +39,12 @@ type CreateTagBody = {
 };
 
 export async function POST(request: NextRequest) {
-  const session = await getStaffSession();
-  if (!session) {
+  const staff = await getStaffMember();
+  if (!staff) {
     return NextResponse.json({ error: "Not authenticated" }, { status: 401 });
+  }
+  if (!canManageTagDefinitions(staff.role)) {
+    return NextResponse.json({ error: "Forbidden" }, { status: 403 });
   }
 
   let body: CreateTagBody;

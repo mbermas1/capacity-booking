@@ -21,6 +21,7 @@ model Warehouse {
   detentionFreeMinutes Int? // grace period before detention accrues; null (with a rate set) = no grace period
   docks                Dock[]
   staff                Staff[]
+  staffAccess          StaffWarehouse[]
   laborShifts          LaborShift[]
   yardCapacity         YardCapacity?
   bookingRequests      BookingRequest[]
@@ -93,16 +94,35 @@ model ScoreAppeal {
 }
 
 model Staff {
-  id           String    @id @default(cuid())
-  name         String
-  email        String    @unique
-  passwordHash String
-  warehouse    Warehouse @relation(fields: [warehouseId], references: [id])
-  warehouseId  String
-  createdAt    DateTime  @default(now())
-  updatedAt    DateTime  @updatedAt
+  id              String           @id @default(cuid())
+  name            String
+  email           String           @unique
+  passwordHash    String
+  role            StaffRole        @default(ADMIN) // migration backfill default: existing accounts keep full access
+  warehouse       Warehouse        @relation(fields: [warehouseId], references: [id])
+  warehouseId     String // home location; sole scope for DOCK_STAFF, base of the assigned set for FACILITY_MANAGER
+  warehouseAccess StaffWarehouse[] // additional locations, FACILITY_MANAGER only
+  createdAt       DateTime         @default(now())
+  updatedAt       DateTime         @updatedAt
 
   @@index([warehouseId])
+}
+
+model StaffWarehouse {
+  staff       Staff     @relation(fields: [staffId], references: [id], onDelete: Cascade)
+  staffId     String
+  warehouse   Warehouse @relation(fields: [warehouseId], references: [id], onDelete: Cascade)
+  warehouseId String
+  createdAt   DateTime  @default(now())
+
+  @@id([staffId, warehouseId])
+}
+
+enum StaffRole {
+  ADMIN
+  FACILITY_MANAGER
+  DOCK_STAFF
+  ANALYST
 }
 
 model Booking {
