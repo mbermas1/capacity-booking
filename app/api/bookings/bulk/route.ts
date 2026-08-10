@@ -1,7 +1,8 @@
 import { NextRequest, NextResponse } from "next/server";
-import { CARRIER_NAME_INCLUDE, withCarrierName } from "@/lib/booking-response";
+import { withCarrierName } from "@/lib/booking-response";
+import { createBookingWithTx } from "@/lib/bookings";
 import { prisma } from "@/lib/prisma";
-import { BookingStatus, LoadType } from "@/app/generated/prisma/client";
+import { BookingStatus, BookingPriority, LoadType } from "@/app/generated/prisma/client";
 
 type BulkBookingInput = {
   dockId?: unknown;
@@ -11,6 +12,9 @@ type BulkBookingInput = {
   referenceNumber?: unknown;
   loadType?: unknown;
   status?: unknown;
+  priority?: unknown;
+  shipmentVolume?: unknown;
+  commodityTagIds?: unknown;
 };
 
 type ParsedBooking = {
@@ -21,18 +25,19 @@ type ParsedBooking = {
   referenceNumber: string;
   loadType: LoadType;
   status?: BookingStatus;
+  priority?: BookingPriority;
+  shipmentVolume?: number;
+  commodityTagIds?: string[];
 };
 
 function isNonEmptyString(value: unknown): value is string {
   return typeof value === "string" && value.trim().length > 0;
 }
 
-class BulkOverlapError extends Error {
-  constructor(index: number, referenceNumber: string) {
-    super(
-      `bookings[${index}] (referenceNumber: ${referenceNumber}) overlaps an existing or another batch booking on this dock`,
-    );
-    this.name = "BulkOverlapError";
+class BulkBookingError extends Error {
+  constructor(index: number, referenceNumber: string, cause: Error) {
+    super(`bookings[${index}] (referenceNumber: ${referenceNumber}): ${cause.message}`);
+    this.name = "BulkBookingError";
   }
 }
 
@@ -100,6 +105,34 @@ export async function POST(request: NextRequest) {
       }
     }
 
+    let priority: BookingPriority | undefined;
+    if (item?.priority !== undefined) {
+      const validPriorities = Object.values(BookingPriority) as string[];
+      if (typeof item.priority !== "string" || !validPriorities.includes(item.priority)) {
+        itemErrors.push(`bookings[${index}].priority must be one of: ${validPriorities.join(", ")}`);
+      } else {
+        priority = item.priority as BookingPriority;
+      }
+    }
+
+    let shipmentVolume: number | undefined;
+    if (item?.shipmentVolume !== undefined) {
+      if (typeof item.shipmentVolume !== "number" || !Number.isInteger(item.shipmentVolume) || item.shipmentVolume < 0) {
+        itemErrors.push(`bookings[${index}].shipmentVolume must be a non-negative integer`);
+      } else {
+        shipmentVolume = item.shipmentVolume;
+      }
+    }
+
+    let commodityTagIds: string[] | undefined;
+    if (item?.commodityTagIds !== undefined) {
+      if (!Array.isArray(item.commodityTagIds) || !item.commodityTagIds.every((id) => typeof id === "string")) {
+        itemErrors.push(`bookings[${index}].commodityTagIds must be an array of strings`);
+      } else {
+        commodityTagIds = item.commodityTagIds;
+      }
+    }
+
     errors.push(...itemErrors);
 
     if (itemErrors.length === 0) {
@@ -111,6 +144,9 @@ export async function POST(request: NextRequest) {
         referenceNumber: (item.referenceNumber as string).trim(),
         loadType: item.loadType as LoadType,
         status,
+        priority,
+        shipmentVolume,
+        commodityTagIds,
       });
     }
   });
@@ -137,27 +173,15 @@ export async function POST(request: NextRequest) {
       for (let index = 0; index < parsed.length; index++) {
         const item = parsed[index];
 
-        const overlap = await tx.booking.findFirst({
-          where: {
-            dockId: item.dockId,
-            startTime: { lt: item.endTime },
-            endTime: { gt: item.startTime },
-          },
-        });
-
-        if (overlap) {
-          throw new BulkOverlapError(index, item.referenceNumber);
-        }
-
         const carrier = await tx.carrier.upsert({
           where: { name: item.carrierName },
           create: { name: item.carrierName },
           update: {},
         });
 
-        created.push(
-          await tx.booking.create({
-            data: {
+        try {
+          created.push(
+            await createBookingWithTx(tx, {
               dockId: item.dockId,
               startTime: item.startTime,
               endTime: item.endTime,
@@ -165,17 +189,21 @@ export async function POST(request: NextRequest) {
               referenceNumber: item.referenceNumber,
               loadType: item.loadType,
               status: item.status,
-            },
-            include: CARRIER_NAME_INCLUDE,
-          }),
-        );
+              priority: item.priority,
+              shipmentVolume: item.shipmentVolume,
+              commodityTagIds: item.commodityTagIds,
+            }),
+          );
+        } catch (cause) {
+          throw new BulkBookingError(index, item.referenceNumber, cause as Error);
+        }
       }
       return created;
     });
 
     return NextResponse.json({ bookings: bookings.map(withCarrierName) }, { status: 201 });
   } catch (error) {
-    if (error instanceof BulkOverlapError) {
+    if (error instanceof BulkBookingError) {
       return NextResponse.json({ error: error.message }, { status: 409 });
     }
 

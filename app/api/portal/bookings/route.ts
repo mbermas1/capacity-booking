@@ -1,9 +1,17 @@
 import { NextRequest, NextResponse } from "next/server";
-import { BookingOverlapError, createBooking } from "@/lib/bookings";
+import {
+  BookingOverlapError,
+  DockNotFoundError,
+  DockClosedError,
+  MissingCarrierTagError,
+  UnacceptedCommodityError,
+  MinimumDurationError,
+  createBooking,
+} from "@/lib/bookings";
 import { CARRIER_NAME_INCLUDE, withCarrierName } from "@/lib/booking-response";
 import { prisma } from "@/lib/prisma";
 import { getPortalSession } from "@/lib/portal-session";
-import { LoadType, Prisma } from "@/app/generated/prisma/client";
+import { LoadType, BookingPriority } from "@/app/generated/prisma/client";
 
 const DEFAULT_LIMIT = 20;
 const MAX_LIMIT = 100;
@@ -63,6 +71,9 @@ type CreatePortalBookingBody = {
   endTime?: unknown;
   referenceNumber?: unknown;
   loadType?: unknown;
+  priority?: unknown;
+  shipmentVolume?: unknown;
+  commodityTagIds?: unknown;
 };
 
 export async function POST(request: NextRequest) {
@@ -104,6 +115,34 @@ export async function POST(request: NextRequest) {
     errors.push(`loadType must be one of: ${Object.values(LoadType).join(", ")}`);
   }
 
+  let priority: BookingPriority | undefined;
+  if (body.priority !== undefined) {
+    const validPriorities = Object.values(BookingPriority) as string[];
+    if (typeof body.priority !== "string" || !validPriorities.includes(body.priority)) {
+      errors.push(`priority must be one of: ${validPriorities.join(", ")}`);
+    } else {
+      priority = body.priority as BookingPriority;
+    }
+  }
+
+  let shipmentVolume: number | undefined;
+  if (body.shipmentVolume !== undefined) {
+    if (typeof body.shipmentVolume !== "number" || !Number.isInteger(body.shipmentVolume) || body.shipmentVolume < 0) {
+      errors.push("shipmentVolume must be a non-negative integer");
+    } else {
+      shipmentVolume = body.shipmentVolume;
+    }
+  }
+
+  let commodityTagIds: string[] | undefined;
+  if (body.commodityTagIds !== undefined) {
+    if (!Array.isArray(body.commodityTagIds) || !body.commodityTagIds.every((id) => typeof id === "string")) {
+      errors.push("commodityTagIds must be an array of strings");
+    } else {
+      commodityTagIds = body.commodityTagIds;
+    }
+  }
+
   if (errors.length > 0) {
     return NextResponse.json({ error: "Validation failed", details: errors }, { status: 400 });
   }
@@ -116,16 +155,25 @@ export async function POST(request: NextRequest) {
       carrierId: session.carrierId,
       referenceNumber: (body.referenceNumber as string).trim(),
       loadType: body.loadType as LoadType,
+      priority,
+      shipmentVolume,
+      commodityTagIds,
     });
 
     return NextResponse.json(withCarrierName(booking), { status: 201 });
   } catch (error) {
-    if (error instanceof BookingOverlapError) {
-      return NextResponse.json({ error: error.message }, { status: 409 });
+    if (error instanceof DockNotFoundError) {
+      return NextResponse.json({ error: error.message }, { status: 404 });
     }
 
-    if (error instanceof Prisma.PrismaClientKnownRequestError && error.code === "P2003") {
-      return NextResponse.json({ error: "Dock not found" }, { status: 404 });
+    if (
+      error instanceof BookingOverlapError ||
+      error instanceof DockClosedError ||
+      error instanceof MissingCarrierTagError ||
+      error instanceof UnacceptedCommodityError ||
+      error instanceof MinimumDurationError
+    ) {
+      return NextResponse.json({ error: error.message }, { status: 409 });
     }
 
     console.error("Failed to create portal booking:", error);
