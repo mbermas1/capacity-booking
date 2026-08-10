@@ -10,6 +10,12 @@ export const LOAD_TYPE_STYLES: Record<string, string> = {
   OUTBOUND: "bg-teal-100 text-teal-800 dark:bg-teal-950 dark:text-teal-300",
 };
 
+// STANDARD is the common case and intentionally has no badge — only call out the exceptions.
+export const PRIORITY_STYLES: Record<string, string> = {
+  LOW: "bg-zinc-100 text-zinc-600 dark:bg-zinc-800 dark:text-zinc-400",
+  HIGH: "bg-red-100 text-red-800 dark:bg-red-950 dark:text-red-300",
+};
+
 export function formatTime(date: Date): string {
   return new Intl.DateTimeFormat("en-US", {
     hour: "2-digit",
