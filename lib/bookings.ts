@@ -319,6 +319,35 @@ export async function completeBooking(bookingId: string) {
 }
 
 /**
+ * Deletes the booking and records a CancellationRecord in the same
+ * transaction, so cancellation history survives even though the Booking row
+ * itself doesn't (kept "currently-active-only" on purpose — see
+ * project_dock_rule_conventions). All three cancel call sites (staff API,
+ * portal API, portal UI) route through this instead of calling
+ * prisma.booking.delete() directly.
+ */
+export async function cancelBooking(bookingId: string) {
+  return prisma.$transaction(async (tx) => {
+    const deleted = await tx.booking.delete({
+      where: { id: bookingId },
+      include: { dock: { select: { name: true } }, carrier: { select: { email: true } } },
+    });
+
+    await tx.cancellationRecord.create({
+      data: {
+        carrierId: deleted.carrierId,
+        dockId: deleted.dockId,
+        originalStartTime: deleted.startTime,
+        originalEndTime: deleted.endTime,
+        referenceNumber: deleted.referenceNumber,
+      },
+    });
+
+    return deleted;
+  });
+}
+
+/**
  * Deliberately NOT called from within createBooking/runCreateBooking — that
  * would also fire for public-request-flow bookings (auto-approve and staff
  * approval both call createBooking too), which are explicitly out of scope

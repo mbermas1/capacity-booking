@@ -2,8 +2,37 @@ import Link from "next/link";
 import { revalidatePath } from "next/cache";
 import { prisma } from "@/lib/prisma";
 import { getPortalSession } from "@/lib/portal-session";
-import { notifyBookingCancelled, detectNoShowMany } from "@/lib/bookings";
+import { notifyBookingCancelled, detectNoShowMany, cancelBooking as cancelBookingRecord } from "@/lib/bookings";
+import { computeCarrierScore, type CarrierScore } from "@/lib/carrier-score";
 import { STATUS_STYLES, LOAD_TYPE_STYLES, formatTime } from "@/lib/booking-display";
+
+const TIER_STYLES: Record<CarrierScore["tier"], string> = {
+  TRUSTED: "bg-green-100 text-green-800 dark:bg-green-950 dark:text-green-300",
+  STANDARD: "bg-blue-100 text-blue-800 dark:bg-blue-950 dark:text-blue-300",
+  FLAGGED: "bg-red-100 text-red-800 dark:bg-red-950 dark:text-red-300",
+  INSUFFICIENT_DATA: "bg-zinc-100 text-zinc-600 dark:bg-zinc-800 dark:text-zinc-400",
+};
+
+const TIER_LABELS: Record<CarrierScore["tier"], string> = {
+  TRUSTED: "Trusted",
+  STANDARD: "Standard",
+  FLAGGED: "Flagged",
+  INSUFFICIENT_DATA: "Not enough history yet",
+};
+
+async function submitAppeal(formData: FormData) {
+  "use server";
+
+  const session = await getPortalSession();
+  if (!session) return;
+
+  const note = String(formData.get("note") ?? "").trim();
+  if (!note) return;
+
+  await prisma.scoreAppeal.create({ data: { carrierId: session.carrierId, note } });
+
+  revalidatePath("/portal");
+}
 
 async function cancelBooking(formData: FormData) {
   "use server";
@@ -15,10 +44,7 @@ async function cancelBooking(formData: FormData) {
   const booking = await prisma.booking.findUnique({ where: { id: bookingId } });
   if (!booking || booking.carrierId !== session.carrierId) return;
 
-  const deleted = await prisma.booking.delete({
-    where: { id: bookingId },
-    include: { dock: { select: { name: true } }, carrier: { select: { email: true } } },
-  });
+  const deleted = await cancelBookingRecord(bookingId);
 
   await notifyBookingCancelled(deleted);
 
@@ -38,11 +64,14 @@ export default async function PortalDashboardPage() {
   const session = await getPortalSession();
   if (!session) return null;
 
-  const rawBookings = await prisma.booking.findMany({
-    where: { carrierId: session.carrierId },
-    include: { dock: true },
-    orderBy: { startTime: "desc" },
-  });
+  const [rawBookings, score] = await Promise.all([
+    prisma.booking.findMany({
+      where: { carrierId: session.carrierId },
+      include: { dock: true },
+      orderBy: { startTime: "desc" },
+    }),
+    computeCarrierScore(session.carrierId),
+  ]);
   const bookings = await detectNoShowMany(rawBookings);
 
   const now = new Date();
@@ -51,6 +80,44 @@ export default async function PortalDashboardPage() {
 
   return (
     <div className="flex flex-col gap-8">
+      <section className="rounded-2xl border border-black/[.08] bg-white p-4 dark:border-white/[.145] dark:bg-[#0a0a0a]">
+        <div className="mb-3 flex flex-wrap items-center gap-2">
+          <h2 className="text-lg font-medium text-black dark:text-zinc-50">Your Trust Score</h2>
+          <span className={`rounded-full px-2 py-0.5 text-xs font-medium ${TIER_STYLES[score.tier]}`}>
+            {TIER_LABELS[score.tier]}
+          </span>
+          {score.overall !== null && (
+            <span className="font-mono text-sm text-zinc-500 dark:text-zinc-400">{Math.round(score.overall)}/100</span>
+          )}
+        </div>
+        <ul className="flex flex-col gap-1 text-xs text-zinc-600 dark:text-zinc-400">
+          <li>On-time arrivals: {score.onTime.value !== null ? `${Math.round(score.onTime.value)}%` : "—"} ({score.onTime.detail})</li>
+          <li>No-shows: {score.noShow.value !== null ? `${Math.round(100 - score.noShow.value)}%` : "—"} ({score.noShow.detail})</li>
+          <li>Dwell efficiency: {score.dwell.value !== null ? `${Math.round(score.dwell.value)}%` : "—"} ({score.dwell.detail})</li>
+          <li>Cancellations: {score.cancellation.value !== null ? `${Math.round(100 - score.cancellation.value)}%` : "—"} ({score.cancellation.detail})</li>
+        </ul>
+        <details className="mt-3">
+          <summary className="cursor-pointer text-xs font-medium text-zinc-600 dark:text-zinc-400">
+            Dispute this score
+          </summary>
+          <form action={submitAppeal} className="mt-2 flex flex-col gap-2">
+            <textarea
+              name="note"
+              required
+              rows={2}
+              placeholder="Tell us what looks wrong and we'll take a look."
+              className="w-full rounded-lg border border-black/[.08] bg-white px-3 py-2 text-sm text-black dark:border-white/[.145] dark:bg-black dark:text-zinc-50"
+            />
+            <button
+              type="submit"
+              className="h-8 w-fit rounded-full border border-black/[.08] px-3 text-xs font-medium transition-colors hover:bg-black/[.04] dark:border-white/[.145] dark:hover:bg-[#1a1a1a]"
+            >
+              Submit
+            </button>
+          </form>
+        </details>
+      </section>
+
       <section>
         <h2 className="mb-3 text-lg font-medium text-black dark:text-zinc-50">Upcoming Bookings</h2>
         {upcoming.length === 0 ? (

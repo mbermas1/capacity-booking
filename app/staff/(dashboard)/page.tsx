@@ -3,6 +3,21 @@ import { prisma } from "@/lib/prisma";
 import { hashPassword } from "@/lib/portal-auth";
 import { PartnerType } from "@/app/generated/prisma/client";
 import { PARTNER_TYPE_LABELS } from "@/lib/partner-type";
+import { computeCarrierScore, type CarrierScore } from "@/lib/carrier-score";
+
+const TIER_STYLES: Record<CarrierScore["tier"], string> = {
+  TRUSTED: "bg-green-100 text-green-800 dark:bg-green-950 dark:text-green-300",
+  STANDARD: "bg-blue-100 text-blue-800 dark:bg-blue-950 dark:text-blue-300",
+  FLAGGED: "bg-red-100 text-red-800 dark:bg-red-950 dark:text-red-300",
+  INSUFFICIENT_DATA: "bg-zinc-100 text-zinc-600 dark:bg-zinc-800 dark:text-zinc-400",
+};
+
+const TIER_LABELS: Record<CarrierScore["tier"], string> = {
+  TRUSTED: "Trusted",
+  STANDARD: "Standard",
+  FLAGGED: "Flagged",
+  INSUFFICIENT_DATA: "Not enough history",
+};
 
 async function createCarrierAccount(formData: FormData) {
   "use server";
@@ -49,6 +64,9 @@ export default async function StaffCarriersPage() {
     }),
     prisma.tag.findMany({ where: { category: "CARRIER_REQUIREMENT" }, orderBy: { name: "asc" } }),
   ]);
+  const scores = new Map(
+    await Promise.all(carriers.map(async (c) => [c.id, await computeCarrierScore(c.id)] as const)),
+  );
 
   return (
     <div className="flex flex-col gap-8">
@@ -141,6 +159,7 @@ export default async function StaffCarriersPage() {
           <ul className="flex flex-col divide-y divide-black/[.06] rounded-2xl border border-black/[.08] bg-white px-4 dark:divide-white/[.08] dark:border-white/[.145] dark:bg-[#0a0a0a]">
             {carriers.map((carrier) => {
               const assignedTagIds = new Set(carrier.tags.map((ct) => ct.tagId));
+              const score = scores.get(carrier.id)!;
               return (
                 <li key={carrier.id} className="flex flex-col gap-2 py-3">
                   <div className="flex flex-wrap items-center justify-between gap-2">
@@ -164,8 +183,16 @@ export default async function StaffCarriersPage() {
                       >
                         {carrier.passwordHash ? "Login enabled" : "No login"}
                       </span>
+                      <span className={`rounded-full px-2 py-0.5 text-xs font-medium ${TIER_STYLES[score.tier]}`}>
+                        {TIER_LABELS[score.tier]}
+                        {score.overall !== null ? ` · ${Math.round(score.overall)}` : ""}
+                      </span>
                     </div>
                   </div>
+                  <p className="text-xs text-zinc-500 dark:text-zinc-500">
+                    On-time {score.onTime.detail} · No-shows {score.noShow.detail} · Dwell {score.dwell.detail} ·
+                    Cancellations {score.cancellation.detail}
+                  </p>
                   {requirementTags.length > 0 && (
                     <form
                       action={updateCarrierRequirementTags.bind(null, carrier.id)}

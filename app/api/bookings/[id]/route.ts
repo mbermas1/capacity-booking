@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { CARRIER_NAME_INCLUDE, withCarrierName } from "@/lib/booking-response";
-import { notifyBookingCancelled, detectNoShow } from "@/lib/bookings";
+import { notifyBookingCancelled, detectNoShow, cancelBooking } from "@/lib/bookings";
 import { prisma } from "@/lib/prisma";
 import { BookingStatus, Prisma } from "@/app/generated/prisma/client";
 
@@ -75,10 +75,7 @@ export async function DELETE(
   const { id } = await params;
 
   try {
-    const booking = await prisma.booking.delete({
-      where: { id },
-      include: { dock: { select: { name: true } }, carrier: { select: { email: true } } },
-    });
+    const booking = await cancelBooking(id);
 
     await notifyBookingCancelled(booking);
 
