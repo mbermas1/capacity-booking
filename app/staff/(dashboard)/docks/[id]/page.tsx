@@ -3,6 +3,7 @@ import { notFound } from "next/navigation";
 import { revalidatePath } from "next/cache";
 import { prisma } from "@/lib/prisma";
 import { TagCategory } from "@/app/generated/prisma/client";
+import { computeDockDwellStats } from "@/lib/dock-dwell";
 
 const DAY_NAMES = ["Sunday", "Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday"];
 
@@ -118,6 +119,7 @@ export default async function StaffDockDetailPage({ params }: { params: Promise<
   const allTags = await prisma.tag.findMany({ orderBy: { name: "asc" } });
   const hoursByDay = new Map(dock.operatingHours.map((h) => [h.dayOfWeek, h]));
   const assignedTagIds = new Set(dock.tags.map((dt) => dt.tagId));
+  const dwell = await computeDockDwellStats(dockId);
 
   return (
     <div className="flex flex-col gap-8">
@@ -126,6 +128,11 @@ export default async function StaffDockDetailPage({ params }: { params: Promise<
           ← Docks
         </Link>
         <h1 className="mt-1 text-xl font-semibold text-black dark:text-zinc-50">{dock.name}</h1>
+        <p className="mt-1 text-sm text-zinc-500 dark:text-zinc-400">
+          {dwell.averageDwellMinutes !== null
+            ? `Avg dwell: ${Math.round(dwell.averageDwellMinutes)} min (scheduled: ${Math.round(dwell.averageScheduledMinutes!)} min) · ${dwell.sampleSize} completed bookings`
+            : "Not enough completed bookings yet for a dwell-time average"}
+        </p>
       </div>
 
       <section>

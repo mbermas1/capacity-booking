@@ -2,6 +2,7 @@ import Link from "next/link";
 import { revalidatePath } from "next/cache";
 import { prisma } from "@/lib/prisma";
 import { getStaffMember } from "@/lib/staff-session";
+import { computeDockDwellStats } from "@/lib/dock-dwell";
 
 async function createDock(formData: FormData) {
   "use server";
@@ -33,6 +34,9 @@ export default async function StaffDocksPage() {
     orderBy: { name: "asc" },
     include: { _count: { select: { bookings: true, operatingHours: true, tags: true } } },
   });
+  const dwellStats = new Map(
+    await Promise.all(docks.map(async (d) => [d.id, await computeDockDwellStats(d.id)] as const)),
+  );
 
   return (
     <div className="flex flex-col gap-8">
@@ -106,7 +110,9 @@ export default async function StaffDocksPage() {
           <p className="text-sm text-zinc-500 dark:text-zinc-500">No docks yet.</p>
         ) : (
           <ul className="flex flex-col divide-y divide-black/[.06] rounded-2xl border border-black/[.08] bg-white px-4 dark:divide-white/[.08] dark:border-white/[.145] dark:bg-[#0a0a0a]">
-            {docks.map((dock) => (
+            {docks.map((dock) => {
+              const dwell = dwellStats.get(dock.id)!;
+              return (
               <li key={dock.id} className="flex flex-wrap items-center justify-between gap-2 py-3">
                 <div className="flex flex-col gap-0.5">
                   <Link
@@ -118,6 +124,7 @@ export default async function StaffDocksPage() {
                   <span className="text-xs text-zinc-500 dark:text-zinc-400">
                     {dock.location} · {dock.equipmentType} · capacity {dock.capacity} · {dock._count.bookings} booking
                     {dock._count.bookings === 1 ? "" : "s"}
+                    {dwell.averageDwellMinutes !== null && ` · avg dwell ${Math.round(dwell.averageDwellMinutes)} min`}
                   </span>
                 </div>
                 <div className="flex items-center gap-2 text-xs text-zinc-500 dark:text-zinc-400">
@@ -126,7 +133,8 @@ export default async function StaffDocksPage() {
                   <span>{dock._count.tags} tag{dock._count.tags === 1 ? "" : "s"}</span>
                 </div>
               </li>
-            ))}
+              );
+            })}
           </ul>
         )}
       </section>

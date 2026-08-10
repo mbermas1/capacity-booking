@@ -220,6 +220,8 @@ export default async function StaffSchedulePage({
                             {booking.status === "COMPLETED" && booking.completedAt && (
                               <span className="font-mono text-xs text-zinc-500 dark:text-zinc-400">
                                 done {formatTime(booking.completedAt)}
+                                {booking.checkedInAt &&
+                                  ` (${Math.round((booking.completedAt.getTime() - booking.checkedInAt.getTime()) / 60000)} min)`}
                               </span>
                             )}
                           </div>
