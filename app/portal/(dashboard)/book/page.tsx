@@ -2,9 +2,16 @@ import { redirect } from "next/navigation";
 import { prisma } from "@/lib/prisma";
 import { getDockAvailability } from "@/lib/availability";
 import { getPortalSession } from "@/lib/portal-session";
-import { BookingOverlapError, createBooking } from "@/lib/bookings";
+import {
+  BookingOverlapError,
+  DockClosedError,
+  MissingCarrierTagError,
+  UnacceptedCommodityError,
+  MinimumDurationError,
+  createBooking,
+} from "@/lib/bookings";
 import { formatTime } from "@/lib/booking-display";
-import { LoadType } from "@/app/generated/prisma/client";
+import { LoadType, BookingPriority } from "@/app/generated/prisma/client";
 
 function parseUtc(datetimeLocalValue: string): Date | null {
   if (!datetimeLocalValue) return null;
@@ -23,6 +30,9 @@ async function bookSlot(formData: FormData) {
   const endTimeRaw = String(formData.get("endTime") ?? "");
   const referenceNumber = String(formData.get("referenceNumber") ?? "").trim();
   const loadType = String(formData.get("loadType") ?? "");
+  const priorityRaw = String(formData.get("priority") ?? "");
+  const commodityTagId = String(formData.get("commodityTagId") ?? "");
+  const shipmentVolumeRaw = String(formData.get("shipmentVolume") ?? "").trim();
 
   const params = new URLSearchParams({ dockId, startTime: startTimeRaw, endTime: endTimeRaw });
 
@@ -34,6 +44,15 @@ async function bookSlot(formData: FormData) {
     redirect(`/portal/book?${params.toString()}`);
   }
 
+  const priority = Object.values(BookingPriority).includes(priorityRaw as BookingPriority)
+    ? (priorityRaw as BookingPriority)
+    : undefined;
+
+  const shipmentVolume =
+    shipmentVolumeRaw && Number.isInteger(Number(shipmentVolumeRaw)) && Number(shipmentVolumeRaw) >= 0
+      ? Number(shipmentVolumeRaw)
+      : undefined;
+
   try {
     await createBooking({
       dockId,
@@ -42,13 +61,25 @@ async function bookSlot(formData: FormData) {
       carrierId: session.carrierId,
       referenceNumber,
       loadType: loadType as LoadType,
+      priority,
+      shipmentVolume,
+      commodityTagIds: commodityTagId ? [commodityTagId] : undefined,
     });
   } catch (error) {
     if (error instanceof BookingOverlapError) {
       params.set("error", "overlap");
-      redirect(`/portal/book?${params.toString()}`);
+    } else if (error instanceof DockClosedError) {
+      params.set("error", "closed");
+    } else if (error instanceof MissingCarrierTagError) {
+      params.set("error", "missing-tag");
+    } else if (error instanceof UnacceptedCommodityError) {
+      params.set("error", "commodity");
+    } else if (error instanceof MinimumDurationError) {
+      params.set("error", "duration");
+    } else {
+      throw error;
     }
-    throw error;
+    redirect(`/portal/book?${params.toString()}`);
   }
 
   redirect("/portal");
@@ -61,7 +92,10 @@ export default async function PortalBookPage({
 }) {
   const { dockId, startTime: startTimeParam, endTime: endTimeParam, error } = await searchParams;
 
-  const docks = await prisma.dock.findMany({ orderBy: { name: "asc" } });
+  const [docks, commodityTags] = await Promise.all([
+    prisma.dock.findMany({ orderBy: { name: "asc" } }),
+    prisma.tag.findMany({ where: { category: "COMMODITY" }, orderBy: { name: "asc" } }),
+  ]);
 
   const startTime = startTimeParam ? parseUtc(startTimeParam) : null;
   const endTime = endTimeParam ? parseUtc(endTimeParam) : null;
@@ -144,6 +178,26 @@ export default async function PortalBookPage({
           That slot was just booked by someone else. Pick a different time.
         </p>
       )}
+      {error === "closed" && (
+        <p className="rounded-lg bg-red-100 px-3 py-2 text-sm text-red-800 dark:bg-red-950 dark:text-red-300">
+          This dock is closed during the requested time. Check its operating hours and try a different time.
+        </p>
+      )}
+      {error === "missing-tag" && (
+        <p className="rounded-lg bg-red-100 px-3 py-2 text-sm text-red-800 dark:bg-red-950 dark:text-red-300">
+          This dock requires a carrier certification your account doesn&rsquo;t have yet. Contact the warehouse.
+        </p>
+      )}
+      {error === "commodity" && (
+        <p className="rounded-lg bg-red-100 px-3 py-2 text-sm text-red-800 dark:bg-red-950 dark:text-red-300">
+          This dock doesn&rsquo;t accept the selected commodity. Pick a different dock or commodity.
+        </p>
+      )}
+      {error === "duration" && (
+        <p className="rounded-lg bg-red-100 px-3 py-2 text-sm text-red-800 dark:bg-red-950 dark:text-red-300">
+          The selected commodity requires a longer booking window. Extend the time range and try again.
+        </p>
+      )}
 
       {availability === null && dockId && (
         <p className="text-sm text-zinc-500 dark:text-zinc-500">Dock not found.</p>
@@ -185,6 +239,51 @@ export default async function PortalBookPage({
                     <option value="INBOUND">Inbound</option>
                     <option value="OUTBOUND">Outbound</option>
                   </select>
+                </div>
+                <div className="flex flex-col gap-1">
+                  <label htmlFor="commodityTagId" className="text-sm font-medium text-zinc-700 dark:text-zinc-300">
+                    Commodity
+                  </label>
+                  <select
+                    id="commodityTagId"
+                    name="commodityTagId"
+                    defaultValue=""
+                    className="h-10 rounded-lg border border-black/[.08] bg-white px-3 text-sm text-black dark:border-white/[.145] dark:bg-black dark:text-zinc-50"
+                  >
+                    <option value="">No commodity</option>
+                    {commodityTags.map((tag) => (
+                      <option key={tag.id} value={tag.id}>
+                        {tag.name}
+                      </option>
+                    ))}
+                  </select>
+                </div>
+                <div className="flex flex-col gap-1">
+                  <label htmlFor="priority" className="text-sm font-medium text-zinc-700 dark:text-zinc-300">
+                    Priority
+                  </label>
+                  <select
+                    id="priority"
+                    name="priority"
+                    defaultValue={BookingPriority.STANDARD}
+                    className="h-10 rounded-lg border border-black/[.08] bg-white px-3 text-sm text-black dark:border-white/[.145] dark:bg-black dark:text-zinc-50"
+                  >
+                    <option value="LOW">Low</option>
+                    <option value="STANDARD">Standard</option>
+                    <option value="HIGH">High</option>
+                  </select>
+                </div>
+                <div className="flex flex-col gap-1">
+                  <label htmlFor="shipmentVolume" className="text-sm font-medium text-zinc-700 dark:text-zinc-300">
+                    Pallet Count (optional)
+                  </label>
+                  <input
+                    id="shipmentVolume"
+                    name="shipmentVolume"
+                    type="number"
+                    min="0"
+                    className="h-10 w-40 rounded-lg border border-black/[.08] bg-white px-3 text-sm text-black dark:border-white/[.145] dark:bg-black dark:text-zinc-50"
+                  />
                 </div>
                 <button
                   type="submit"
