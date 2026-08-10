@@ -20,6 +20,32 @@ const TIER_LABELS: Record<CarrierScore["tier"], string> = {
   INSUFFICIENT_DATA: "Not enough history yet",
 };
 
+function ComponentTrendRow({
+  label,
+  points,
+}: {
+  label: string;
+  points: { periodStart: string; periodEnd: string; value: number | null }[];
+}) {
+  return (
+    <div>
+      <span className="text-xs text-zinc-500 dark:text-zinc-400">{label}</span>
+      <div className="flex h-6 items-end gap-1">
+        {points.map((p) => (
+          <div
+            key={p.periodStart}
+            title={`${p.periodStart} – ${p.periodEnd}: ${
+              p.value !== null ? `${Math.round(p.value)}%` : "insufficient data"
+            }`}
+            className={`flex-1 rounded-t ${p.value !== null ? "bg-foreground" : "bg-zinc-200 dark:bg-zinc-700"}`}
+            style={{ height: `${p.value !== null ? Math.max(2, Math.round(p.value)) : 2}%` }}
+          />
+        ))}
+      </div>
+    </div>
+  );
+}
+
 async function submitAppeal(formData: FormData) {
   "use server";
 
@@ -114,6 +140,18 @@ export default async function PortalDashboardPage() {
                 style={{ height: `${bucket.overall !== null ? Math.max(2, Math.round(bucket.overall)) : 2}%` }}
               />
             ))}
+          </div>
+          <div className="mt-3 flex flex-col gap-2">
+            <ComponentTrendRow label="On-time" points={scoreTrend.map((b) => ({ ...b, value: b.onTime.value }))} />
+            <ComponentTrendRow
+              label="No-shows"
+              points={scoreTrend.map((b) => ({ ...b, value: b.noShow.value !== null ? 100 - b.noShow.value : null }))}
+            />
+            <ComponentTrendRow label="Dwell efficiency" points={scoreTrend.map((b) => ({ ...b, value: b.dwell.value }))} />
+            <ComponentTrendRow
+              label="Cancellations"
+              points={scoreTrend.map((b) => ({ ...b, value: b.cancellation.value !== null ? 100 - b.cancellation.value : null }))}
+            />
           </div>
         </details>
         <details className="mt-3">

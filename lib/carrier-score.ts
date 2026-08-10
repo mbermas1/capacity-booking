@@ -149,7 +149,7 @@ export type ScoreTrendBucket = {
   periodEnd: string;
   overall: number | null;
   tier: CarrierScore["tier"];
-};
+} & Omit<CarrierScore, "overall" | "tier">;
 
 const TREND_BUCKET_DAYS = 7;
 const TREND_NUM_BUCKETS = 8;
@@ -185,12 +185,14 @@ export async function computeCarrierScoreTrend(carrierId: string): Promise<Score
       (c) => c.originalStartTime >= bucketStart && c.originalStartTime < bucketEnd,
     ).length;
 
-    const overall = weightedAverage(computeComponents(bucketBookings, bucketCancellations));
+    const components = computeComponents(bucketBookings, bucketCancellations);
+    const overall = weightedAverage(components);
     return {
       periodStart: bucketStart.toISOString().slice(0, 10),
       periodEnd: new Date(bucketEnd.getTime() - dayMs).toISOString().slice(0, 10),
       overall,
       tier: tierFor(overall),
+      ...components,
     };
   });
 }
