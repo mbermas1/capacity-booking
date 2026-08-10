@@ -45,6 +45,7 @@ model Carrier {
   name         String       @unique
   email        String?      @unique
   passwordHash String?
+  partnerType  PartnerType  @default(CARRIER)
   tags         CarrierTag[]
   bookings     Booking[]
   createdAt    DateTime     @default(now())
@@ -101,6 +102,12 @@ enum BookingPriority {
   LOW
   STANDARD
   HIGH
+}
+
+enum PartnerType {
+  CARRIER
+  SUPPLIER
+  THIRD_PARTY_LOGISTICS
 }
 
 enum TagCategory {

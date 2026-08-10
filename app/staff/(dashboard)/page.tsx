@@ -1,6 +1,13 @@
 import { revalidatePath } from "next/cache";
 import { prisma } from "@/lib/prisma";
 import { hashPassword } from "@/lib/portal-auth";
+import { PartnerType } from "@/app/generated/prisma/client";
+
+const PARTNER_TYPE_LABELS: Record<PartnerType, string> = {
+  CARRIER: "Carrier",
+  SUPPLIER: "Supplier",
+  THIRD_PARTY_LOGISTICS: "3PL",
+};
 
 async function createCarrierAccount(formData: FormData) {
   "use server";
@@ -8,13 +15,17 @@ async function createCarrierAccount(formData: FormData) {
   const name = String(formData.get("name") ?? "").trim();
   const email = String(formData.get("email") ?? "").trim();
   const password = String(formData.get("password") ?? "");
+  const partnerTypeRaw = String(formData.get("partnerType") ?? "");
+  const partnerType = Object.values(PartnerType).includes(partnerTypeRaw as PartnerType)
+    ? (partnerTypeRaw as PartnerType)
+    : PartnerType.CARRIER;
 
   if (!name || !email || !password) return;
 
   await prisma.carrier.upsert({
     where: { name },
-    create: { name, email, passwordHash: hashPassword(password) },
-    update: { email, passwordHash: hashPassword(password) },
+    create: { name, email, passwordHash: hashPassword(password), partnerType },
+    update: { email, passwordHash: hashPassword(password), partnerType },
   });
 
   revalidatePath("/staff");
@@ -97,6 +108,23 @@ export default async function StaffCarriersPage() {
               className="h-10 rounded-lg border border-black/[.08] bg-white px-3 text-sm text-black dark:border-white/[.145] dark:bg-black dark:text-zinc-50"
             />
           </div>
+          <div className="flex flex-col gap-1">
+            <label htmlFor="partnerType" className="text-sm font-medium text-zinc-700 dark:text-zinc-300">
+              Partner Type
+            </label>
+            <select
+              id="partnerType"
+              name="partnerType"
+              defaultValue={PartnerType.CARRIER}
+              className="h-10 rounded-lg border border-black/[.08] bg-white px-3 text-sm text-black dark:border-white/[.145] dark:bg-black dark:text-zinc-50"
+            >
+              {Object.values(PartnerType).map((type) => (
+                <option key={type} value={type}>
+                  {PARTNER_TYPE_LABELS[type]}
+                </option>
+              ))}
+            </select>
+          </div>
           <button
             type="submit"
             className="h-10 rounded-full bg-foreground px-4 text-sm font-medium text-background transition-colors hover:bg-[#383838] dark:hover:bg-[#ccc]"
@@ -128,15 +156,20 @@ export default async function StaffCarriersPage() {
                         {carrier._count.bookings === 1 ? "" : "s"}
                       </span>
                     </div>
-                    <span
-                      className={`rounded-full px-2 py-0.5 text-xs font-medium ${
-                        carrier.passwordHash
-                          ? "bg-green-100 text-green-800 dark:bg-green-950 dark:text-green-300"
-                          : "bg-zinc-100 text-zinc-600 dark:bg-zinc-800 dark:text-zinc-400"
-                      }`}
-                    >
-                      {carrier.passwordHash ? "Login enabled" : "No login"}
-                    </span>
+                    <div className="flex items-center gap-2">
+                      <span className="rounded-full bg-zinc-100 px-2 py-0.5 text-xs font-medium text-zinc-600 dark:bg-zinc-800 dark:text-zinc-400">
+                        {PARTNER_TYPE_LABELS[carrier.partnerType]}
+                      </span>
+                      <span
+                        className={`rounded-full px-2 py-0.5 text-xs font-medium ${
+                          carrier.passwordHash
+                            ? "bg-green-100 text-green-800 dark:bg-green-950 dark:text-green-300"
+                            : "bg-zinc-100 text-zinc-600 dark:bg-zinc-800 dark:text-zinc-400"
+                        }`}
+                      >
+                        {carrier.passwordHash ? "Login enabled" : "No login"}
+                      </span>
+                    </div>
                   </div>
                   {requirementTags.length > 0 && (
                     <form
