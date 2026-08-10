@@ -1,4 +1,5 @@
 import { redirect } from "next/navigation";
+import { randomBytes } from "node:crypto";
 import { prisma } from "@/lib/prisma";
 import { getStaffMember } from "@/lib/staff-session";
 import { formatTime } from "@/lib/booking-display";
@@ -96,6 +97,18 @@ async function rejectRequest(requestId: string, formData: FormData) {
   redirect("/staff/requests?message=Request rejected.");
 }
 
+async function regenerateLink() {
+  "use server";
+
+  const staff = await getStaffMember();
+  if (!staff) return;
+
+  const publicBookingSlug = randomBytes(16).toString("hex");
+  await prisma.warehouse.update({ where: { id: staff.warehouseId }, data: { publicBookingSlug } });
+
+  redirect("/staff/requests?message=Link regenerated. The old link no longer works.");
+}
+
 export default async function StaffRequestsPage({
   searchParams,
 }: {
@@ -127,6 +140,27 @@ export default async function StaffRequestsPage({
           Could not approve: {error}
         </p>
       )}
+
+      <section>
+        <h2 className="mb-2 text-sm font-medium text-zinc-700 dark:text-zinc-300">Public Booking Link</h2>
+        <div className="flex flex-wrap items-center gap-3 rounded-2xl border border-black/[.08] bg-white p-4 dark:border-white/[.145] dark:bg-[#0a0a0a]">
+          <code className="rounded-lg bg-zinc-100 px-3 py-2 text-sm text-black dark:bg-zinc-900 dark:text-zinc-50">
+            /book/{staff.warehouse.publicBookingSlug}
+          </code>
+          <form action={regenerateLink}>
+            <button
+              type="submit"
+              className="h-9 rounded-full border border-black/[.08] px-4 text-sm font-medium transition-colors hover:bg-black/[.04] dark:border-white/[.145] dark:hover:bg-[#1a1a1a]"
+            >
+              Regenerate Link
+            </button>
+          </form>
+        </div>
+        <p className="mt-2 text-xs text-zinc-500 dark:text-zinc-500">
+          Anyone with this link can view open capacity and submit a request — no login required. Regenerating
+          immediately invalidates the current link.
+        </p>
+      </section>
 
       <section>
         <h1 className="mb-4 text-xl font-semibold text-black dark:text-zinc-50">Pending Requests</h1>

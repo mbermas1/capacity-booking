@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
+import { randomBytes } from "node:crypto";
 import { prisma } from "@/lib/prisma";
 import { getStaffSession } from "@/lib/staff-session";
 
@@ -49,6 +50,7 @@ export async function POST(request: NextRequest) {
     data: {
       name: (body.name as string).trim(),
       location: (body.location as string).trim(),
+      publicBookingSlug: randomBytes(16).toString("hex"),
     },
   });
 

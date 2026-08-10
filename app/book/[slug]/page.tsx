@@ -9,7 +9,7 @@ function parseUtc(datetimeLocalValue: string): Date | null {
   return Number.isNaN(date.getTime()) ? null : date;
 }
 
-async function submitRequest(warehouseId: string, formData: FormData) {
+async function submitRequest(slug: string, warehouseId: string, formData: FormData) {
   "use server";
 
   const dockId = String(formData.get("dockId") ?? "");
@@ -36,19 +36,19 @@ async function submitRequest(warehouseId: string, formData: FormData) {
     (loadType !== LoadType.INBOUND && loadType !== LoadType.OUTBOUND)
   ) {
     params.set("error", "invalid");
-    redirect(`/book/${warehouseId}?${params.toString()}`);
+    redirect(`/book/${slug}?${params.toString()}`);
   }
 
   const dock = await prisma.dock.findUnique({ where: { id: dockId }, select: { warehouseId: true } });
   if (!dock || dock.warehouseId !== warehouseId) {
     params.set("error", "invalid");
-    redirect(`/book/${warehouseId}?${params.toString()}`);
+    redirect(`/book/${slug}?${params.toString()}`);
   }
 
   const availability = await getPublicDockAvailability(dockId, startTime, endTime);
   if (!availability?.available) {
     params.set("error", "unavailable");
-    redirect(`/book/${warehouseId}?${params.toString()}`);
+    redirect(`/book/${slug}?${params.toString()}`);
   }
 
   await prisma.bookingRequest.create({
@@ -65,22 +65,23 @@ async function submitRequest(warehouseId: string, formData: FormData) {
     },
   });
 
-  redirect(`/book/${warehouseId}?submitted=1`);
+  redirect(`/book/${slug}?submitted=1`);
 }
 
 export default async function PublicBookingPage({
   params,
   searchParams,
 }: {
-  params: Promise<{ warehouseId: string }>;
+  params: Promise<{ slug: string }>;
   searchParams: Promise<{ dockId?: string; startTime?: string; endTime?: string; error?: string; submitted?: string }>;
 }) {
-  const { warehouseId } = await params;
+  const { slug } = await params;
   const { dockId, startTime: startTimeParam, endTime: endTimeParam, error, submitted } = await searchParams;
 
   const warehouse = await prisma.warehouse.findUnique({
-    where: { id: warehouseId },
+    where: { publicBookingSlug: slug },
     select: {
+      id: true,
       name: true,
       location: true,
       docks: { select: { id: true, name: true, location: true, equipmentType: true }, orderBy: { name: "asc" } },
@@ -95,7 +96,7 @@ export default async function PublicBookingPage({
   const availability =
     dockId && startTime && endTime ? await getPublicDockAvailability(dockId, startTime, endTime) : null;
 
-  const boundSubmitRequest = submitRequest.bind(null, warehouseId);
+  const boundSubmitRequest = submitRequest.bind(null, slug, warehouse.id);
 
   return (
     <div className="flex flex-1 flex-col bg-zinc-50 font-sans dark:bg-black">
@@ -115,7 +116,7 @@ export default async function PublicBookingPage({
 
         <section>
           <form
-            action={`/book/${warehouseId}`}
+            action={`/book/${slug}`}
             className="flex flex-col gap-4 rounded-2xl border border-black/[.08] bg-white p-5 dark:border-white/[.145] dark:bg-[#0a0a0a] sm:flex-row sm:flex-wrap sm:items-end"
           >
             <div className="flex flex-col gap-1">
