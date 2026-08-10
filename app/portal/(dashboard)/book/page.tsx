@@ -8,8 +8,10 @@ import {
   MissingCarrierTagError,
   UnacceptedCommodityError,
   MinimumDurationError,
+  LeadTimeError,
   createBooking,
 } from "@/lib/bookings";
+import { checkLeadTime } from "@/lib/booking-constraints";
 import { formatTime } from "@/lib/booking-display";
 import { LoadType, BookingPriority } from "@/app/generated/prisma/client";
 
@@ -54,6 +56,11 @@ async function bookSlot(formData: FormData) {
       : undefined;
 
   try {
+    const dock = await prisma.dock.findUnique({ where: { id: dockId }, select: { minLeadTimeMinutes: true } });
+    if (dock && checkLeadTime(dock.minLeadTimeMinutes, startTime, new Date())) {
+      throw new LeadTimeError(dock.minLeadTimeMinutes as number);
+    }
+
     await createBooking({
       dockId,
       startTime,
@@ -76,6 +83,8 @@ async function bookSlot(formData: FormData) {
       params.set("error", "commodity");
     } else if (error instanceof MinimumDurationError) {
       params.set("error", "duration");
+    } else if (error instanceof LeadTimeError) {
+      params.set("error", "lead-time");
     } else {
       throw error;
     }
@@ -196,6 +205,11 @@ export default async function PortalBookPage({
       {error === "duration" && (
         <p className="rounded-lg bg-red-100 px-3 py-2 text-sm text-red-800 dark:bg-red-950 dark:text-red-300">
           The selected commodity requires a longer booking window. Extend the time range and try again.
+        </p>
+      )}
+      {error === "lead-time" && (
+        <p className="rounded-lg bg-red-100 px-3 py-2 text-sm text-red-800 dark:bg-red-950 dark:text-red-300">
+          This booking must be made further in advance. Check the dock&rsquo;s lead time requirement and try again.
         </p>
       )}
 

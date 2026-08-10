@@ -88,3 +88,16 @@ export function findUnacceptedCommodities(dockTags: DockTagWithTag[], declaredTa
 export function requiredMinDurationMinutes(declaredTags: TagLike[]): number {
   return declaredTags.reduce((max, t) => Math.max(max, t.minDurationMinutes ?? 0), 0);
 }
+
+/**
+ * Portal bookings only — checked explicitly by carrier-facing call sites, not by
+ * runCreateBooking, since staff already have notice when they create a booking.
+ */
+export function checkLeadTime(minLeadTimeMinutes: number | null, startTime: Date, now: Date): string | null {
+  if (!minLeadTimeMinutes) return null;
+  const minutesUntilStart = (startTime.getTime() - now.getTime()) / 60000;
+  if (minutesUntilStart < minLeadTimeMinutes) {
+    return `This dock requires at least ${minLeadTimeMinutes} minutes of advance notice`;
+  }
+  return null;
+}

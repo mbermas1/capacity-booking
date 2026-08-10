@@ -29,10 +29,16 @@ type CreateDockBody = {
   equipmentType?: unknown;
   warehouseId?: unknown;
   capacity?: unknown;
+  minLeadTimeMinutes?: unknown;
+  bufferMinutes?: unknown;
 };
 
 function isPositiveInteger(value: unknown): value is number {
   return typeof value === "number" && Number.isInteger(value) && value >= 1;
+}
+
+function isNonNegativeInteger(value: unknown): value is number {
+  return typeof value === "number" && Number.isInteger(value) && value >= 0;
 }
 
 export async function POST(request: NextRequest) {
@@ -55,6 +61,12 @@ export async function POST(request: NextRequest) {
   if (body.capacity !== undefined && !isPositiveInteger(body.capacity)) {
     errors.push("capacity must be a positive integer if provided");
   }
+  if (body.minLeadTimeMinutes !== undefined && !isNonNegativeInteger(body.minLeadTimeMinutes)) {
+    errors.push("minLeadTimeMinutes must be a non-negative integer if provided");
+  }
+  if (body.bufferMinutes !== undefined && !isNonNegativeInteger(body.bufferMinutes)) {
+    errors.push("bufferMinutes must be a non-negative integer if provided");
+  }
 
   if (errors.length > 0) {
     return NextResponse.json({ error: "Validation failed", details: errors }, { status: 400 });
@@ -68,6 +80,8 @@ export async function POST(request: NextRequest) {
         equipmentType: (body.equipmentType as string).trim(),
         warehouseId: body.warehouseId as string,
         ...(body.capacity !== undefined ? { capacity: body.capacity as number } : {}),
+        ...(body.minLeadTimeMinutes !== undefined ? { minLeadTimeMinutes: body.minLeadTimeMinutes as number } : {}),
+        ...(body.bufferMinutes !== undefined ? { bufferMinutes: body.bufferMinutes as number } : {}),
       },
     });
 

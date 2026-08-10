@@ -6,8 +6,10 @@ import {
   MissingCarrierTagError,
   UnacceptedCommodityError,
   MinimumDurationError,
+  LeadTimeError,
   createBooking,
 } from "@/lib/bookings";
+import { checkLeadTime } from "@/lib/booking-constraints";
 import { CARRIER_NAME_INCLUDE, withCarrierName } from "@/lib/booking-response";
 import { prisma } from "@/lib/prisma";
 import { getPortalSession } from "@/lib/portal-session";
@@ -148,6 +150,14 @@ export async function POST(request: NextRequest) {
   }
 
   try {
+    const dock = await prisma.dock.findUnique({
+      where: { id: body.dockId as string },
+      select: { minLeadTimeMinutes: true },
+    });
+    if (dock && checkLeadTime(dock.minLeadTimeMinutes, startTime as Date, new Date())) {
+      throw new LeadTimeError(dock.minLeadTimeMinutes as number);
+    }
+
     const booking = await createBooking({
       dockId: body.dockId as string,
       startTime: startTime as Date,
@@ -171,7 +181,8 @@ export async function POST(request: NextRequest) {
       error instanceof DockClosedError ||
       error instanceof MissingCarrierTagError ||
       error instanceof UnacceptedCommodityError ||
-      error instanceof MinimumDurationError
+      error instanceof MinimumDurationError ||
+      error instanceof LeadTimeError
     ) {
       return NextResponse.json({ error: error.message }, { status: 409 });
     }

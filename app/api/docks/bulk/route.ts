@@ -7,6 +7,8 @@ type BulkDockInput = {
   equipmentType?: unknown;
   warehouseId?: unknown;
   capacity?: unknown;
+  minLeadTimeMinutes?: unknown;
+  bufferMinutes?: unknown;
 };
 
 function isNonEmptyString(value: unknown): value is string {
@@ -15,6 +17,10 @@ function isNonEmptyString(value: unknown): value is string {
 
 function isPositiveInteger(value: unknown): value is number {
   return typeof value === "number" && Number.isInteger(value) && value >= 1;
+}
+
+function isNonNegativeInteger(value: unknown): value is number {
+  return typeof value === "number" && Number.isInteger(value) && value >= 0;
 }
 
 export async function POST(request: NextRequest) {
@@ -53,6 +59,12 @@ export async function POST(request: NextRequest) {
     if (item?.capacity !== undefined && !isPositiveInteger(item.capacity)) {
       errors.push(`docks[${index}].capacity must be a positive integer if provided`);
     }
+    if (item?.minLeadTimeMinutes !== undefined && !isNonNegativeInteger(item.minLeadTimeMinutes)) {
+      errors.push(`docks[${index}].minLeadTimeMinutes must be a non-negative integer if provided`);
+    }
+    if (item?.bufferMinutes !== undefined && !isNonNegativeInteger(item.bufferMinutes)) {
+      errors.push(`docks[${index}].bufferMinutes must be a non-negative integer if provided`);
+    }
   });
 
   if (errors.length > 0) {
@@ -82,6 +94,8 @@ export async function POST(request: NextRequest) {
             equipmentType: (item.equipmentType as string).trim(),
             warehouseId: item.warehouseId as string,
             ...(item.capacity !== undefined ? { capacity: item.capacity as number } : {}),
+            ...(item.minLeadTimeMinutes !== undefined ? { minLeadTimeMinutes: item.minLeadTimeMinutes as number } : {}),
+            ...(item.bufferMinutes !== undefined ? { bufferMinutes: item.bufferMinutes as number } : {}),
           },
         }),
       );

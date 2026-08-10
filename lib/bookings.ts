@@ -55,6 +55,14 @@ export class MinimumDurationError extends Error {
   }
 }
 
+/** Portal bookings only — not thrown by runCreateBooking, see checkLeadTime call sites. */
+export class LeadTimeError extends Error {
+  constructor(public requiredMinutes: number) {
+    super(`Booking must be made at least ${requiredMinutes} minutes before the requested start time`);
+    this.name = "LeadTimeError";
+  }
+}
+
 export type CreateBookingInput = {
   dockId: string;
   startTime: Date;
@@ -114,11 +122,12 @@ async function runCreateBooking(tx: Prisma.TransactionClient, input: CreateBooki
     }
   }
 
+  const bufferMs = (dock.bufferMinutes ?? 0) * 60000;
   const overlappingCount = await tx.booking.count({
     where: {
       dockId,
-      startTime: { lt: endTime },
-      endTime: { gt: startTime },
+      startTime: { lt: new Date(endTime.getTime() + bufferMs) },
+      endTime: { gt: new Date(startTime.getTime() - bufferMs) },
     },
   });
 

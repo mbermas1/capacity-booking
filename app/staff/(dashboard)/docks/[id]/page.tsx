@@ -12,6 +12,13 @@ const CATEGORY_LABELS: Record<string, string> = {
   CARRIER_REQUIREMENT: "Carrier Requirement",
 };
 
+function parseOptionalNonNegativeInt(raw: string): number | null {
+  const trimmed = raw.trim();
+  if (!trimmed) return null;
+  const value = Number(trimmed);
+  return Number.isInteger(value) && value >= 0 ? value : null;
+}
+
 async function updateDockDetails(dockId: string, formData: FormData) {
   "use server";
 
@@ -20,10 +27,15 @@ async function updateDockDetails(dockId: string, formData: FormData) {
   const equipmentType = String(formData.get("equipmentType") ?? "").trim();
   const capacityRaw = String(formData.get("capacity") ?? "").trim();
   const capacity = Number.isInteger(Number(capacityRaw)) && Number(capacityRaw) >= 1 ? Number(capacityRaw) : 1;
+  const minLeadTimeMinutes = parseOptionalNonNegativeInt(String(formData.get("minLeadTimeMinutes") ?? ""));
+  const bufferMinutes = parseOptionalNonNegativeInt(String(formData.get("bufferMinutes") ?? ""));
 
   if (!name || !location || !equipmentType) return;
 
-  await prisma.dock.update({ where: { id: dockId }, data: { name, location, equipmentType, capacity } });
+  await prisma.dock.update({
+    where: { id: dockId },
+    data: { name, location, equipmentType, capacity, minLeadTimeMinutes, bufferMinutes },
+  });
   revalidatePath(`/staff/docks/${dockId}`);
 }
 
@@ -160,6 +172,32 @@ export default async function StaffDockDetailPage({ params }: { params: Promise<
               type="number"
               min="1"
               defaultValue={dock.capacity}
+              className="h-10 w-24 rounded-lg border border-black/[.08] bg-white px-3 text-sm text-black dark:border-white/[.145] dark:bg-black dark:text-zinc-50"
+            />
+          </div>
+          <div className="flex flex-col gap-1">
+            <label htmlFor="minLeadTimeMinutes" className="text-sm font-medium text-zinc-700 dark:text-zinc-300">
+              Minimum Lead Time (minutes, optional)
+            </label>
+            <input
+              id="minLeadTimeMinutes"
+              name="minLeadTimeMinutes"
+              type="number"
+              min="0"
+              defaultValue={dock.minLeadTimeMinutes ?? ""}
+              className="h-10 w-24 rounded-lg border border-black/[.08] bg-white px-3 text-sm text-black dark:border-white/[.145] dark:bg-black dark:text-zinc-50"
+            />
+          </div>
+          <div className="flex flex-col gap-1">
+            <label htmlFor="bufferMinutes" className="text-sm font-medium text-zinc-700 dark:text-zinc-300">
+              Buffer Time (minutes, optional)
+            </label>
+            <input
+              id="bufferMinutes"
+              name="bufferMinutes"
+              type="number"
+              min="0"
+              defaultValue={dock.bufferMinutes ?? ""}
               className="h-10 w-24 rounded-lg border border-black/[.08] bg-white px-3 text-sm text-black dark:border-white/[.145] dark:bg-black dark:text-zinc-50"
             />
           </div>

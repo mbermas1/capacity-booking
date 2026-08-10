@@ -8,6 +8,8 @@ type UpdateDockBody = {
   equipmentType?: unknown;
   warehouseId?: unknown;
   capacity?: unknown;
+  minLeadTimeMinutes?: unknown;
+  bufferMinutes?: unknown;
 };
 
 function isNonEmptyString(value: unknown): value is string {
@@ -16,6 +18,10 @@ function isNonEmptyString(value: unknown): value is string {
 
 function isPositiveInteger(value: unknown): value is number {
   return typeof value === "number" && Number.isInteger(value) && value >= 1;
+}
+
+function isNonNegativeInteger(value: unknown): value is number {
+  return typeof value === "number" && Number.isInteger(value) && value >= 0;
 }
 
 export async function GET(
@@ -49,7 +55,15 @@ export async function PATCH(
   }
 
   const errors: string[] = [];
-  const data: { name?: string; location?: string; equipmentType?: string; warehouseId?: string; capacity?: number } = {};
+  const data: {
+    name?: string;
+    location?: string;
+    equipmentType?: string;
+    warehouseId?: string;
+    capacity?: number;
+    minLeadTimeMinutes?: number | null;
+    bufferMinutes?: number | null;
+  } = {};
 
   if (body.name !== undefined) {
     if (!isNonEmptyString(body.name)) errors.push("name must be a non-empty string");
@@ -76,8 +90,22 @@ export async function PATCH(
     else data.capacity = body.capacity;
   }
 
+  if (body.minLeadTimeMinutes !== undefined) {
+    if (body.minLeadTimeMinutes === null) data.minLeadTimeMinutes = null;
+    else if (!isNonNegativeInteger(body.minLeadTimeMinutes)) errors.push("minLeadTimeMinutes must be a non-negative integer or null");
+    else data.minLeadTimeMinutes = body.minLeadTimeMinutes;
+  }
+
+  if (body.bufferMinutes !== undefined) {
+    if (body.bufferMinutes === null) data.bufferMinutes = null;
+    else if (!isNonNegativeInteger(body.bufferMinutes)) errors.push("bufferMinutes must be a non-negative integer or null");
+    else data.bufferMinutes = body.bufferMinutes;
+  }
+
   if (Object.keys(data).length === 0 && errors.length === 0) {
-    errors.push("At least one of name, location, equipmentType, warehouseId, capacity must be provided");
+    errors.push(
+      "At least one of name, location, equipmentType, warehouseId, capacity, minLeadTimeMinutes, bufferMinutes must be provided",
+    );
   }
 
   if (errors.length > 0) {
