@@ -6,7 +6,11 @@ import {
   findUnacceptedCommodities,
   requiredMinDurationMinutes,
 } from "@/lib/booking-constraints";
-import { sendBookingConfirmationEmail, sendBookingCancellationEmail } from "@/lib/email";
+import {
+  sendBookingConfirmationEmail,
+  sendBookingCancellationEmail,
+  sendBookingRescheduledEmail,
+} from "@/lib/email";
 import { BookingPriority } from "@/app/generated/prisma/client";
 import type {
   BookingStatus,
@@ -25,6 +29,13 @@ export class DockNotFoundError extends Error {
   constructor() {
     super("Dock not found");
     this.name = "DockNotFoundError";
+  }
+}
+
+export class BookingNotFoundError extends Error {
+  constructor() {
+    super("Booking not found");
+    this.name = "BookingNotFoundError";
   }
 }
 
@@ -78,8 +89,25 @@ export type CreateBookingInput = {
   commodityTagIds?: string[];
 };
 
-async function runCreateBooking(tx: Prisma.TransactionClient, input: CreateBookingInput) {
-  const { dockId, startTime, endTime, carrierId, commodityTagIds = [] } = input;
+type ValidateSlotParams = {
+  dockId: string;
+  startTime: Date;
+  endTime: Date;
+  carrierId: string;
+  priority: BookingPriority;
+  commodityTagIds: string[];
+  /** Excludes this booking's own row from the overlap/capacity count — used by reschedule. */
+  excludeBookingId?: string;
+};
+
+/**
+ * Shared by booking creation and rescheduling: hours, carrier-requirement tags,
+ * commodity acceptance/duration, and capacity/buffer overlap. Identical to what
+ * runCreateBooking always did, just extracted so reschedule can reuse it with
+ * one addition — excluding the booking's own row from the overlap count.
+ */
+async function validateBookingSlot(tx: Prisma.TransactionClient, params: ValidateSlotParams) {
+  const { dockId, startTime, endTime, carrierId, priority, commodityTagIds, excludeBookingId } = params;
 
   if (endTime <= startTime) {
     throw new Error("endTime must be after startTime");
@@ -127,19 +155,35 @@ async function runCreateBooking(tx: Prisma.TransactionClient, input: CreateBooki
   const overlappingCount = await tx.booking.count({
     where: {
       dockId,
+      ...(excludeBookingId ? { id: { not: excludeBookingId } } : {}),
       startTime: { lt: new Date(endTime.getTime() + bufferMs) },
       endTime: { gt: new Date(startTime.getTime() - bufferMs) },
     },
   });
 
-  const effectivePriority = input.priority ?? BookingPriority.STANDARD;
   const reservedForHigh = dock.reservedHighPrioritySlots ?? 0;
   const capacityLimit =
-    effectivePriority === BookingPriority.HIGH ? dock.capacity : Math.max(0, dock.capacity - reservedForHigh);
+    priority === BookingPriority.HIGH ? dock.capacity : Math.max(0, dock.capacity - reservedForHigh);
 
   if (overlappingCount >= capacityLimit) {
     throw new BookingOverlapError();
   }
+
+  return { dock, declaredTags };
+}
+
+async function runCreateBooking(tx: Prisma.TransactionClient, input: CreateBookingInput) {
+  const { dockId, startTime, endTime, carrierId, commodityTagIds = [] } = input;
+  const effectivePriority = input.priority ?? BookingPriority.STANDARD;
+
+  const { declaredTags } = await validateBookingSlot(tx, {
+    dockId,
+    startTime,
+    endTime,
+    carrierId,
+    priority: effectivePriority,
+    commodityTagIds,
+  });
 
   return tx.booking.create({
     data: {
@@ -169,6 +213,48 @@ export async function createBooking(input: CreateBookingInput) {
  */
 export async function createBookingWithTx(tx: Prisma.TransactionClient, input: CreateBookingInput) {
   return runCreateBooking(tx, input);
+}
+
+export type RescheduleBookingInput = { startTime: Date; endTime: Date };
+
+/**
+ * Moves an existing booking's time on the same dock — dock, carrier, priority,
+ * and declared commodity all carry over unchanged; this isn't a general
+ * booking-edit operation. Re-validates the new window against every rule
+ * (hours, tags, commodity duration, capacity/buffer), excluding the booking's
+ * own row from the overlap count so it doesn't conflict with itself.
+ */
+async function runRescheduleBooking(
+  tx: Prisma.TransactionClient,
+  bookingId: string,
+  input: RescheduleBookingInput,
+) {
+  const existing = await tx.booking.findUnique({ where: { id: bookingId }, include: { tags: true } });
+  if (!existing) {
+    throw new BookingNotFoundError();
+  }
+
+  await validateBookingSlot(tx, {
+    dockId: existing.dockId,
+    startTime: input.startTime,
+    endTime: input.endTime,
+    carrierId: existing.carrierId,
+    priority: existing.priority,
+    commodityTagIds: existing.tags.map((t) => t.tagId),
+    excludeBookingId: bookingId,
+  });
+
+  const booking = await tx.booking.update({
+    where: { id: bookingId },
+    data: { startTime: input.startTime, endTime: input.endTime },
+    include: CARRIER_NAME_INCLUDE,
+  });
+
+  return { booking, previousStartTime: existing.startTime, previousEndTime: existing.endTime };
+}
+
+export async function rescheduleBooking(bookingId: string, input: RescheduleBookingInput) {
+  return prisma.$transaction((tx) => runRescheduleBooking(tx, bookingId, input));
 }
 
 /**
@@ -211,6 +297,33 @@ export async function notifyBookingCancelled(booking: {
     dockName: booking.dock.name,
     startTime: booking.startTime,
     endTime: booking.endTime,
+    referenceNumber: booking.referenceNumber,
+  });
+}
+
+/**
+ * Unlike notifyBookingCancelled, the row still exists after a reschedule
+ * (it's an update, not a delete), so this looks itself up by id like
+ * notifyBookingConfirmed does — just with the pre-reschedule times passed in,
+ * since those are only known to the caller that just performed the update.
+ */
+export async function notifyBookingRescheduled(
+  bookingId: string,
+  previousStartTime: Date,
+  previousEndTime: Date,
+): Promise<void> {
+  const booking = await prisma.booking.findUnique({
+    where: { id: bookingId },
+    include: { dock: { select: { name: true } }, carrier: { select: { email: true } } },
+  });
+  if (!booking?.carrier.email) return;
+
+  await sendBookingRescheduledEmail(booking.carrier.email, {
+    dockName: booking.dock.name,
+    previousStartTime,
+    previousEndTime,
+    newStartTime: booking.startTime,
+    newEndTime: booking.endTime,
     referenceNumber: booking.referenceNumber,
   });
 }

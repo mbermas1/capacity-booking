@@ -1,3 +1,4 @@
+import Link from "next/link";
 import { revalidatePath } from "next/cache";
 import { prisma } from "@/lib/prisma";
 import { getPortalSession } from "@/lib/portal-session";
@@ -77,15 +78,23 @@ export default async function PortalDashboardPage() {
                     {booking.status.replace("_", " ")}
                   </span>
                   {booking.status === "SCHEDULED" && (
-                    <form action={cancelBooking}>
-                      <input type="hidden" name="bookingId" value={booking.id} />
-                      <button
-                        type="submit"
-                        className="h-8 rounded-full border border-black/[.08] px-3 text-xs font-medium transition-colors hover:bg-black/[.04] dark:border-white/[.145] dark:hover:bg-[#1a1a1a]"
+                    <>
+                      <Link
+                        href={`/portal/bookings/${booking.id}/reschedule`}
+                        className="flex h-8 items-center rounded-full border border-black/[.08] px-3 text-xs font-medium transition-colors hover:bg-black/[.04] dark:border-white/[.145] dark:hover:bg-[#1a1a1a]"
                       >
-                        Cancel
-                      </button>
-                    </form>
+                        Reschedule
+                      </Link>
+                      <form action={cancelBooking}>
+                        <input type="hidden" name="bookingId" value={booking.id} />
+                        <button
+                          type="submit"
+                          className="h-8 rounded-full border border-black/[.08] px-3 text-xs font-medium transition-colors hover:bg-black/[.04] dark:border-white/[.145] dark:hover:bg-[#1a1a1a]"
+                        >
+                          Cancel
+                        </button>
+                      </form>
+                    </>
                   )}
                 </div>
               </li>

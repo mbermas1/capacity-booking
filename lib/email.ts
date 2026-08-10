@@ -66,3 +66,21 @@ export async function sendBookingCancellationEmail(
     `<p>Your dock appointment has been cancelled.</p><ul><li>Dock: ${context.dockName}</li><li>Time: ${context.startTime.toISOString()}–${context.endTime.toISOString()} UTC</li><li>Reference: ${context.referenceNumber}</li></ul>`,
   );
 }
+
+export async function sendBookingRescheduledEmail(
+  to: string,
+  context: {
+    dockName: string;
+    previousStartTime: Date;
+    previousEndTime: Date;
+    newStartTime: Date;
+    newEndTime: Date;
+    referenceNumber: string;
+  },
+): Promise<boolean> {
+  return sendEmail(
+    to,
+    `Booking rescheduled — ${context.dockName}`,
+    `<p>Your dock appointment has been rescheduled.</p><ul><li>Dock: ${context.dockName}</li><li>Previous time: ${context.previousStartTime.toISOString()}–${context.previousEndTime.toISOString()} UTC</li><li>New time: ${context.newStartTime.toISOString()}–${context.newEndTime.toISOString()} UTC</li><li>Reference: ${context.referenceNumber}</li></ul>`,
+  );
+}
