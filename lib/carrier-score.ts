@@ -75,15 +75,23 @@ function weightedAverage(components: Omit<CarrierScore, "overall" | "tier">): nu
   return totalWeight === 0 ? null : weightedSum / totalWeight;
 }
 
-export async function computeCarrierScore(carrierId: string): Promise<CarrierScore> {
-  const [bookings, cancellations] = await Promise.all([
-    prisma.booking.findMany({
-      where: { carrierId },
-      select: { status: true, startTime: true, endTime: true, checkedInAt: true, completedAt: true },
-    }),
-    prisma.cancellationRecord.count({ where: { carrierId } }),
-  ]);
+type BookingForScoring = {
+  status: "SCHEDULED" | "CHECKED_IN" | "COMPLETED" | "NO_SHOW";
+  startTime: Date;
+  endTime: Date;
+  checkedInAt: Date | null;
+  completedAt: Date | null;
+};
 
+/**
+ * The four-component formula, pulled out of computeCarrierScore so
+ * computeCarrierScoreTrend can re-run the exact same logic per bucket instead
+ * of duplicating it.
+ */
+function computeComponents(
+  bookings: BookingForScoring[],
+  cancellations: number,
+): Omit<CarrierScore, "overall" | "tier"> {
   // On-time %: of bookings ever checked in, % checked in at/before the scheduled start.
   const checkedIn = bookings.filter((b) => b.checkedInAt !== null);
   const onTimeCount = checkedIn.filter((b) => b.checkedInAt! <= b.startTime).length;
@@ -118,8 +126,71 @@ export async function computeCarrierScore(carrierId: string): Promise<CarrierSco
   const totalAttempts = bookings.length + cancellations;
   const cancellation = toComponent(bookings.length, totalAttempts, `${cancellations}/${totalAttempts} attempts cancelled`);
 
-  const components = { onTime, noShow, dwell, cancellation };
+  return { onTime, noShow, dwell, cancellation };
+}
+
+export async function computeCarrierScore(carrierId: string): Promise<CarrierScore> {
+  const [bookings, cancellations] = await Promise.all([
+    prisma.booking.findMany({
+      where: { carrierId },
+      select: { status: true, startTime: true, endTime: true, checkedInAt: true, completedAt: true },
+    }),
+    prisma.cancellationRecord.count({ where: { carrierId } }),
+  ]);
+
+  const components = computeComponents(bookings, cancellations);
   const overall = weightedAverage(components);
 
   return { overall, tier: tierFor(overall), ...components };
+}
+
+export type ScoreTrendBucket = {
+  periodStart: string;
+  periodEnd: string;
+  overall: number | null;
+  tier: CarrierScore["tier"];
+};
+
+const TREND_BUCKET_DAYS = 7;
+const TREND_NUM_BUCKETS = 8;
+
+/**
+ * Weekly (not daily) trailing buckets, re-running computeComponents per
+ * bucket — daily buckets would hit MIN_SAMPLE_SIZE almost every day for most
+ * carriers at this app's scale. Bucketed by the booking's scheduled
+ * startTime (and CancellationRecord.originalStartTime for cancellations) —
+ * the one consistent anchor across all four components.
+ */
+export async function computeCarrierScoreTrend(carrierId: string): Promise<ScoreTrendBucket[]> {
+  const dayMs = 24 * 60 * 60 * 1000;
+  const windowStart = new Date(Date.now() - TREND_NUM_BUCKETS * TREND_BUCKET_DAYS * dayMs);
+
+  const [bookings, cancellationRecords] = await Promise.all([
+    prisma.booking.findMany({
+      where: { carrierId, startTime: { gte: windowStart } },
+      select: { status: true, startTime: true, endTime: true, checkedInAt: true, completedAt: true },
+    }),
+    prisma.cancellationRecord.findMany({
+      where: { carrierId, originalStartTime: { gte: windowStart } },
+      select: { originalStartTime: true },
+    }),
+  ]);
+
+  return Array.from({ length: TREND_NUM_BUCKETS }, (_, i) => {
+    const bucketStart = new Date(windowStart.getTime() + i * TREND_BUCKET_DAYS * dayMs);
+    const bucketEnd = new Date(bucketStart.getTime() + TREND_BUCKET_DAYS * dayMs);
+
+    const bucketBookings = bookings.filter((b) => b.startTime >= bucketStart && b.startTime < bucketEnd);
+    const bucketCancellations = cancellationRecords.filter(
+      (c) => c.originalStartTime >= bucketStart && c.originalStartTime < bucketEnd,
+    ).length;
+
+    const overall = weightedAverage(computeComponents(bucketBookings, bucketCancellations));
+    return {
+      periodStart: bucketStart.toISOString().slice(0, 10),
+      periodEnd: new Date(bucketEnd.getTime() - dayMs).toISOString().slice(0, 10),
+      overall,
+      tier: tierFor(overall),
+    };
+  });
 }

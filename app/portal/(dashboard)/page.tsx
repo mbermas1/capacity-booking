@@ -3,7 +3,7 @@ import { revalidatePath } from "next/cache";
 import { prisma } from "@/lib/prisma";
 import { getPortalSession } from "@/lib/portal-session";
 import { notifyBookingCancelled, detectNoShowMany, cancelBooking as cancelBookingRecord } from "@/lib/bookings";
-import { computeCarrierScore, type CarrierScore } from "@/lib/carrier-score";
+import { computeCarrierScore, computeCarrierScoreTrend, type CarrierScore } from "@/lib/carrier-score";
 import { STATUS_STYLES, LOAD_TYPE_STYLES, formatTime } from "@/lib/booking-display";
 
 const TIER_STYLES: Record<CarrierScore["tier"], string> = {
@@ -64,13 +64,14 @@ export default async function PortalDashboardPage() {
   const session = await getPortalSession();
   if (!session) return null;
 
-  const [rawBookings, score] = await Promise.all([
+  const [rawBookings, score, scoreTrend] = await Promise.all([
     prisma.booking.findMany({
       where: { carrierId: session.carrierId },
       include: { dock: true },
       orderBy: { startTime: "desc" },
     }),
     computeCarrierScore(session.carrierId),
+    computeCarrierScoreTrend(session.carrierId),
   ]);
   const bookings = await detectNoShowMany(rawBookings);
 
@@ -96,6 +97,25 @@ export default async function PortalDashboardPage() {
           <li>Dwell efficiency: {score.dwell.value !== null ? `${Math.round(score.dwell.value)}%` : "—"} ({score.dwell.detail})</li>
           <li>Cancellations: {score.cancellation.value !== null ? `${Math.round(100 - score.cancellation.value)}%` : "—"} ({score.cancellation.detail})</li>
         </ul>
+        <details className="mt-3">
+          <summary className="cursor-pointer text-xs font-medium text-zinc-600 dark:text-zinc-400">
+            Score history (last {scoreTrend.length} weeks)
+          </summary>
+          <div className="mt-2 flex h-10 items-end gap-1">
+            {scoreTrend.map((bucket) => (
+              <div
+                key={bucket.periodStart}
+                title={`${bucket.periodStart} – ${bucket.periodEnd}: ${
+                  bucket.overall !== null ? `${Math.round(bucket.overall)}/100` : "insufficient data"
+                }`}
+                className={`flex-1 rounded-t ${
+                  bucket.overall !== null ? "bg-foreground" : "bg-zinc-200 dark:bg-zinc-700"
+                }`}
+                style={{ height: `${bucket.overall !== null ? Math.max(2, Math.round(bucket.overall)) : 2}%` }}
+              />
+            ))}
+          </div>
+        </details>
         <details className="mt-3">
           <summary className="cursor-pointer text-xs font-medium text-zinc-600 dark:text-zinc-400">
             Dispute this score

@@ -3,7 +3,7 @@ import { prisma } from "@/lib/prisma";
 import { hashPassword } from "@/lib/portal-auth";
 import { PartnerType } from "@/app/generated/prisma/client";
 import { PARTNER_TYPE_LABELS } from "@/lib/partner-type";
-import { computeCarrierScore, type CarrierScore } from "@/lib/carrier-score";
+import { computeCarrierScore, computeCarrierScoreTrend, type CarrierScore } from "@/lib/carrier-score";
 
 const TIER_STYLES: Record<CarrierScore["tier"], string> = {
   TRUSTED: "bg-green-100 text-green-800 dark:bg-green-950 dark:text-green-300",
@@ -66,6 +66,9 @@ export default async function StaffCarriersPage() {
   ]);
   const scores = new Map(
     await Promise.all(carriers.map(async (c) => [c.id, await computeCarrierScore(c.id)] as const)),
+  );
+  const scoreTrends = new Map(
+    await Promise.all(carriers.map(async (c) => [c.id, await computeCarrierScoreTrend(c.id)] as const)),
   );
 
   return (
@@ -160,6 +163,7 @@ export default async function StaffCarriersPage() {
             {carriers.map((carrier) => {
               const assignedTagIds = new Set(carrier.tags.map((ct) => ct.tagId));
               const score = scores.get(carrier.id)!;
+              const scoreTrend = scoreTrends.get(carrier.id)!;
               return (
                 <li key={carrier.id} className="flex flex-col gap-2 py-3">
                   <div className="flex flex-wrap items-center justify-between gap-2">
@@ -193,6 +197,25 @@ export default async function StaffCarriersPage() {
                     On-time {score.onTime.detail} · No-shows {score.noShow.detail} · Dwell {score.dwell.detail} ·
                     Cancellations {score.cancellation.detail}
                   </p>
+                  <details>
+                    <summary className="cursor-pointer text-xs font-medium text-zinc-500 dark:text-zinc-500">
+                      Score history (last {scoreTrend.length} weeks)
+                    </summary>
+                    <div className="mt-2 flex h-10 items-end gap-1">
+                      {scoreTrend.map((bucket) => (
+                        <div
+                          key={bucket.periodStart}
+                          title={`${bucket.periodStart} – ${bucket.periodEnd}: ${
+                            bucket.overall !== null ? `${Math.round(bucket.overall)}/100` : "insufficient data"
+                          }`}
+                          className={`flex-1 rounded-t ${
+                            bucket.overall !== null ? "bg-foreground" : "bg-zinc-200 dark:bg-zinc-700"
+                          }`}
+                          style={{ height: `${bucket.overall !== null ? Math.max(2, Math.round(bucket.overall)) : 2}%` }}
+                        />
+                      ))}
+                    </div>
+                  </details>
                   {requirementTags.length > 0 && (
                     <form
                       action={updateCarrierRequirementTags.bind(null, carrier.id)}
