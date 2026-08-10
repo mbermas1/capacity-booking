@@ -114,7 +114,7 @@ async function runCreateBooking(tx: Prisma.TransactionClient, input: CreateBooki
     }
   }
 
-  const overlap = await tx.booking.findFirst({
+  const overlappingCount = await tx.booking.count({
     where: {
       dockId,
       startTime: { lt: endTime },
@@ -122,7 +122,7 @@ async function runCreateBooking(tx: Prisma.TransactionClient, input: CreateBooki
     },
   });
 
-  if (overlap) {
+  if (overlappingCount >= dock.capacity) {
     throw new BookingOverlapError();
   }
 

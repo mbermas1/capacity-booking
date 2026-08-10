@@ -209,6 +209,11 @@ export default async function PortalBookPage({
             <>
               <p className="mb-4 text-sm font-medium text-green-700 dark:text-green-400">
                 This slot is available.
+                {availability.capacity > 1 && (
+                  <span className="ml-2 font-normal text-zinc-500 dark:text-zinc-400">
+                    ({availability.conflicts.length} of {availability.capacity} slots booked for this window)
+                  </span>
+                )}
               </p>
               <form action={bookSlot} className="flex flex-col gap-4 sm:flex-row sm:flex-wrap sm:items-end">
                 <input type="hidden" name="dockId" value={dockId} />

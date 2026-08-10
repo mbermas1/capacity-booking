@@ -15,5 +15,9 @@ export async function getDockAvailability(dockId: string, startTime: Date, endTi
     orderBy: { startTime: "asc" },
   });
 
-  return { available: conflicts.length === 0, conflicts: conflicts.map(withCarrierName) };
+  return {
+    available: conflicts.length < dock.capacity,
+    capacity: dock.capacity,
+    conflicts: conflicts.map(withCarrierName),
+  };
 }

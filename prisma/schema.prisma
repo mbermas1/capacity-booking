@@ -29,6 +29,7 @@ model Dock {
   name           String
   location       String
   equipmentType  String
+  capacity       Int                  @default(1) // max simultaneous bookings
   warehouse      Warehouse            @relation(fields: [warehouseId], references: [id])
   warehouseId    String
   operatingHours DockOperatingHours[]

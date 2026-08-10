@@ -12,7 +12,12 @@ type CreateStaffDockBody = {
   location?: unknown;
   equipmentType?: unknown;
   warehouseId?: unknown;
+  capacity?: unknown;
 };
+
+function isPositiveInteger(value: unknown): value is number {
+  return typeof value === "number" && Number.isInteger(value) && value >= 1;
+}
 
 export async function POST(request: NextRequest) {
   const staff = await getStaffMember();
@@ -37,6 +42,9 @@ export async function POST(request: NextRequest) {
   if (body.warehouseId !== undefined && !isNonEmptyString(body.warehouseId)) {
     errors.push("warehouseId must be a non-empty string if provided");
   }
+  if (body.capacity !== undefined && !isPositiveInteger(body.capacity)) {
+    errors.push("capacity must be a positive integer if provided");
+  }
 
   if (errors.length > 0) {
     return NextResponse.json({ error: "Validation failed", details: errors }, { status: 400 });
@@ -49,6 +57,7 @@ export async function POST(request: NextRequest) {
         location: (body.location as string).trim(),
         equipmentType: (body.equipmentType as string).trim(),
         warehouseId: isNonEmptyString(body.warehouseId) ? body.warehouseId : staff.warehouseId,
+        ...(body.capacity !== undefined ? { capacity: body.capacity as number } : {}),
       },
     });
 

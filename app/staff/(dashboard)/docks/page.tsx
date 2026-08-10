@@ -12,11 +12,13 @@ async function createDock(formData: FormData) {
   const name = String(formData.get("name") ?? "").trim();
   const location = String(formData.get("location") ?? "").trim();
   const equipmentType = String(formData.get("equipmentType") ?? "").trim();
+  const capacityRaw = String(formData.get("capacity") ?? "").trim();
+  const capacity = Number.isInteger(Number(capacityRaw)) && Number(capacityRaw) >= 1 ? Number(capacityRaw) : 1;
 
   if (!name || !location || !equipmentType) return;
 
   await prisma.dock.create({
-    data: { name, location, equipmentType, warehouseId: staff.warehouseId },
+    data: { name, location, equipmentType, capacity, warehouseId: staff.warehouseId },
   });
 
   revalidatePath("/staff/docks");
@@ -76,6 +78,19 @@ export default async function StaffDocksPage() {
               className="h-10 rounded-lg border border-black/[.08] bg-white px-3 text-sm text-black dark:border-white/[.145] dark:bg-black dark:text-zinc-50"
             />
           </div>
+          <div className="flex flex-col gap-1">
+            <label htmlFor="capacity" className="text-sm font-medium text-zinc-700 dark:text-zinc-300">
+              Capacity
+            </label>
+            <input
+              id="capacity"
+              name="capacity"
+              type="number"
+              min="1"
+              defaultValue="1"
+              className="h-10 w-24 rounded-lg border border-black/[.08] bg-white px-3 text-sm text-black dark:border-white/[.145] dark:bg-black dark:text-zinc-50"
+            />
+          </div>
           <button
             type="submit"
             className="h-10 rounded-full bg-foreground px-4 text-sm font-medium text-background transition-colors hover:bg-[#383838] dark:hover:bg-[#ccc]"
@@ -101,7 +116,7 @@ export default async function StaffDocksPage() {
                     {dock.name}
                   </Link>
                   <span className="text-xs text-zinc-500 dark:text-zinc-400">
-                    {dock.location} · {dock.equipmentType} · {dock._count.bookings} booking
+                    {dock.location} · {dock.equipmentType} · capacity {dock.capacity} · {dock._count.bookings} booking
                     {dock._count.bookings === 1 ? "" : "s"}
                   </span>
                 </div>

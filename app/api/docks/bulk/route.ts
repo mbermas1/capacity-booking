@@ -6,10 +6,15 @@ type BulkDockInput = {
   location?: unknown;
   equipmentType?: unknown;
   warehouseId?: unknown;
+  capacity?: unknown;
 };
 
 function isNonEmptyString(value: unknown): value is string {
   return typeof value === "string" && value.trim().length > 0;
+}
+
+function isPositiveInteger(value: unknown): value is number {
+  return typeof value === "number" && Number.isInteger(value) && value >= 1;
 }
 
 export async function POST(request: NextRequest) {
@@ -45,6 +50,9 @@ export async function POST(request: NextRequest) {
     if (!isNonEmptyString(item?.location)) errors.push(`docks[${index}].location is required`);
     if (!isNonEmptyString(item?.equipmentType)) errors.push(`docks[${index}].equipmentType is required`);
     if (!isNonEmptyString(item?.warehouseId)) errors.push(`docks[${index}].warehouseId is required`);
+    if (item?.capacity !== undefined && !isPositiveInteger(item.capacity)) {
+      errors.push(`docks[${index}].capacity must be a positive integer if provided`);
+    }
   });
 
   if (errors.length > 0) {
@@ -73,6 +81,7 @@ export async function POST(request: NextRequest) {
             location: (item.location as string).trim(),
             equipmentType: (item.equipmentType as string).trim(),
             warehouseId: item.warehouseId as string,
+            ...(item.capacity !== undefined ? { capacity: item.capacity as number } : {}),
           },
         }),
       );

@@ -18,10 +18,12 @@ async function updateDockDetails(dockId: string, formData: FormData) {
   const name = String(formData.get("name") ?? "").trim();
   const location = String(formData.get("location") ?? "").trim();
   const equipmentType = String(formData.get("equipmentType") ?? "").trim();
+  const capacityRaw = String(formData.get("capacity") ?? "").trim();
+  const capacity = Number.isInteger(Number(capacityRaw)) && Number(capacityRaw) >= 1 ? Number(capacityRaw) : 1;
 
   if (!name || !location || !equipmentType) return;
 
-  await prisma.dock.update({ where: { id: dockId }, data: { name, location, equipmentType } });
+  await prisma.dock.update({ where: { id: dockId }, data: { name, location, equipmentType, capacity } });
   revalidatePath(`/staff/docks/${dockId}`);
 }
 
@@ -146,6 +148,19 @@ export default async function StaffDockDetailPage({ params }: { params: Promise<
               defaultValue={dock.equipmentType}
               required
               className="h-10 rounded-lg border border-black/[.08] bg-white px-3 text-sm text-black dark:border-white/[.145] dark:bg-black dark:text-zinc-50"
+            />
+          </div>
+          <div className="flex flex-col gap-1">
+            <label htmlFor="capacity" className="text-sm font-medium text-zinc-700 dark:text-zinc-300">
+              Capacity
+            </label>
+            <input
+              id="capacity"
+              name="capacity"
+              type="number"
+              min="1"
+              defaultValue={dock.capacity}
+              className="h-10 w-24 rounded-lg border border-black/[.08] bg-white px-3 text-sm text-black dark:border-white/[.145] dark:bg-black dark:text-zinc-50"
             />
           </div>
           <button

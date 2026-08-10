@@ -7,10 +7,15 @@ type UpdateDockBody = {
   location?: unknown;
   equipmentType?: unknown;
   warehouseId?: unknown;
+  capacity?: unknown;
 };
 
 function isNonEmptyString(value: unknown): value is string {
   return typeof value === "string" && value.trim().length > 0;
+}
+
+function isPositiveInteger(value: unknown): value is number {
+  return typeof value === "number" && Number.isInteger(value) && value >= 1;
 }
 
 export async function GET(
@@ -44,7 +49,7 @@ export async function PATCH(
   }
 
   const errors: string[] = [];
-  const data: { name?: string; location?: string; equipmentType?: string; warehouseId?: string } = {};
+  const data: { name?: string; location?: string; equipmentType?: string; warehouseId?: string; capacity?: number } = {};
 
   if (body.name !== undefined) {
     if (!isNonEmptyString(body.name)) errors.push("name must be a non-empty string");
@@ -66,8 +71,13 @@ export async function PATCH(
     else data.warehouseId = body.warehouseId.trim();
   }
 
+  if (body.capacity !== undefined) {
+    if (!isPositiveInteger(body.capacity)) errors.push("capacity must be a positive integer");
+    else data.capacity = body.capacity;
+  }
+
   if (Object.keys(data).length === 0 && errors.length === 0) {
-    errors.push("At least one of name, location, equipmentType, warehouseId must be provided");
+    errors.push("At least one of name, location, equipmentType, warehouseId, capacity must be provided");
   }
 
   if (errors.length > 0) {
