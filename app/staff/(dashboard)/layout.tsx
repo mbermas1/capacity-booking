@@ -16,7 +16,7 @@ export default async function StaffDashboardLayout({ children }: { children: Rea
 
   return (
     <div className="flex flex-1 flex-col bg-zinc-50 font-sans dark:bg-black">
-      <header className="border-b border-black/[.08] bg-white dark:border-white/[.145] dark:bg-[#0a0a0a]">
+      <header className="no-print border-b border-black/[.08] bg-white dark:border-white/[.145] dark:bg-[#0a0a0a]">
         <div className="mx-auto flex w-full max-w-4xl flex-col gap-3 px-6 py-4 sm:px-10">
           <div className="flex items-center justify-between">
             <div className="flex flex-col">
@@ -53,6 +53,9 @@ export default async function StaffDashboardLayout({ children }: { children: Rea
             </Link>
             <Link href="/staff/analytics" className="hover:text-black dark:hover:text-zinc-50">
               Analytics
+            </Link>
+            <Link href="/staff/reports" className="hover:text-black dark:hover:text-zinc-50">
+              Reports
             </Link>
             <Link href="/staff/tags" className="hover:text-black dark:hover:text-zinc-50">
               Tags
