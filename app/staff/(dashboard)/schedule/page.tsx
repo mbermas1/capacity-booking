@@ -2,7 +2,7 @@ import Link from "next/link";
 import { revalidatePath } from "next/cache";
 import { prisma } from "@/lib/prisma";
 import { getStaffMember } from "@/lib/staff-session";
-import { detectNoShowMany, checkInBooking } from "@/lib/bookings";
+import { detectNoShowMany, checkInBooking, completeBooking } from "@/lib/bookings";
 import { STATUS_STYLES, LOAD_TYPE_STYLES, PRIORITY_STYLES, formatTime } from "@/lib/booking-display";
 
 async function checkIn(formData: FormData) {
@@ -16,6 +16,22 @@ async function checkIn(formData: FormData) {
     await checkInBooking(bookingId);
   } catch {
     // booking already moved on (e.g. concurrent edit) — ignore, the re-render shows current state
+  }
+
+  revalidatePath("/staff/schedule");
+}
+
+async function complete(formData: FormData) {
+  "use server";
+
+  const staff = await getStaffMember();
+  if (!staff) return;
+
+  const bookingId = String(formData.get("bookingId") ?? "");
+  try {
+    await completeBooking(bookingId);
+  } catch {
+    // booking already moved on — ignore, the re-render shows current state
   }
 
   revalidatePath("/staff/schedule");
@@ -188,6 +204,22 @@ export default async function StaffSchedulePage({
                             {booking.status === "CHECKED_IN" && booking.checkedInAt && (
                               <span className="font-mono text-xs text-zinc-500 dark:text-zinc-400">
                                 arrived {formatTime(booking.checkedInAt)}
+                              </span>
+                            )}
+                            {booking.status === "CHECKED_IN" && (
+                              <form action={complete}>
+                                <input type="hidden" name="bookingId" value={booking.id} />
+                                <button
+                                  type="submit"
+                                  className="h-7 rounded-full border border-black/[.08] px-3 text-xs font-medium transition-colors hover:bg-black/[.04] dark:border-white/[.145] dark:hover:bg-[#1a1a1a]"
+                                >
+                                  Complete
+                                </button>
+                              </form>
+                            )}
+                            {booking.status === "COMPLETED" && booking.completedAt && (
+                              <span className="font-mono text-xs text-zinc-500 dark:text-zinc-400">
+                                done {formatTime(booking.completedAt)}
                               </span>
                             )}
                           </div>

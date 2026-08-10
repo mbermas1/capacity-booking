@@ -293,6 +293,32 @@ export async function checkInBooking(bookingId: string) {
 }
 
 /**
+ * Staff-witnessed load/unload finishing, same reasoning as checkInBooking:
+ * no notification, and only reachable from CHECKED_IN — a booking can't be
+ * "done" without having arrived, which also gives completedAt - checkedInAt
+ * a real dwell-time window for later use.
+ */
+export async function completeBooking(bookingId: string) {
+  return prisma.$transaction(async (tx) => {
+    const existing = await tx.booking.findUnique({ where: { id: bookingId } });
+    if (!existing) {
+      throw new BookingNotFoundError();
+    }
+    if (existing.status !== "CHECKED_IN") {
+      throw new InvalidStatusTransitionError(
+        `Booking is ${existing.status.replace("_", " ").toLowerCase()}, not checked in`,
+      );
+    }
+
+    return tx.booking.update({
+      where: { id: bookingId },
+      data: { status: "COMPLETED", completedAt: new Date() },
+      include: CARRIER_NAME_INCLUDE,
+    });
+  });
+}
+
+/**
  * Deliberately NOT called from within createBooking/runCreateBooking — that
  * would also fire for public-request-flow bookings (auto-approve and staff
  * approval both call createBooking too), which are explicitly out of scope
