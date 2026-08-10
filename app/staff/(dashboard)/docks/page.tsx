@@ -2,7 +2,7 @@ import Link from "next/link";
 import { revalidatePath } from "next/cache";
 import { prisma } from "@/lib/prisma";
 import { getStaffMember } from "@/lib/staff-session";
-import { computeDockDwellStats } from "@/lib/dock-dwell";
+import { computeDockDwellStats, computeDockDwellTrend } from "@/lib/dock-dwell";
 
 async function createDock(formData: FormData) {
   "use server";
@@ -36,6 +36,9 @@ export default async function StaffDocksPage() {
   });
   const dwellStats = new Map(
     await Promise.all(docks.map(async (d) => [d.id, await computeDockDwellStats(d.id)] as const)),
+  );
+  const dwellTrends = new Map(
+    await Promise.all(docks.map(async (d) => [d.id, await computeDockDwellTrend(d.id)] as const)),
   );
 
   return (
@@ -112,26 +115,57 @@ export default async function StaffDocksPage() {
           <ul className="flex flex-col divide-y divide-black/[.06] rounded-2xl border border-black/[.08] bg-white px-4 dark:divide-white/[.08] dark:border-white/[.145] dark:bg-[#0a0a0a]">
             {docks.map((dock) => {
               const dwell = dwellStats.get(dock.id)!;
+              const dwellTrend = dwellTrends.get(dock.id)!;
+              const maxDwell = Math.max(1, ...dwellTrend.map((b) => b.averageDwellMinutes ?? 0));
               return (
-              <li key={dock.id} className="flex flex-wrap items-center justify-between gap-2 py-3">
-                <div className="flex flex-col gap-0.5">
-                  <Link
-                    href={`/staff/docks/${dock.id}`}
-                    className="text-sm font-medium text-black hover:underline dark:text-zinc-50"
-                  >
-                    {dock.name}
-                  </Link>
-                  <span className="text-xs text-zinc-500 dark:text-zinc-400">
-                    {dock.location} · {dock.equipmentType} · capacity {dock.capacity} · {dock._count.bookings} booking
-                    {dock._count.bookings === 1 ? "" : "s"}
-                    {dwell.averageDwellMinutes !== null && ` · avg dwell ${Math.round(dwell.averageDwellMinutes)} min`}
-                  </span>
+              <li key={dock.id} className="flex flex-col gap-2 py-3">
+                <div className="flex flex-wrap items-center justify-between gap-2">
+                  <div className="flex flex-col gap-0.5">
+                    <Link
+                      href={`/staff/docks/${dock.id}`}
+                      className="text-sm font-medium text-black hover:underline dark:text-zinc-50"
+                    >
+                      {dock.name}
+                    </Link>
+                    <span className="text-xs text-zinc-500 dark:text-zinc-400">
+                      {dock.location} · {dock.equipmentType} · capacity {dock.capacity} · {dock._count.bookings} booking
+                      {dock._count.bookings === 1 ? "" : "s"}
+                      {dwell.averageDwellMinutes !== null && ` · avg dwell ${Math.round(dwell.averageDwellMinutes)} min`}
+                    </span>
+                  </div>
+                  <div className="flex items-center gap-2 text-xs text-zinc-500 dark:text-zinc-400">
+                    <span>{dock._count.operatingHours > 0 ? "Hours set" : "No hours configured"}</span>
+                    <span>·</span>
+                    <span>{dock._count.tags} tag{dock._count.tags === 1 ? "" : "s"}</span>
+                  </div>
                 </div>
-                <div className="flex items-center gap-2 text-xs text-zinc-500 dark:text-zinc-400">
-                  <span>{dock._count.operatingHours > 0 ? "Hours set" : "No hours configured"}</span>
-                  <span>·</span>
-                  <span>{dock._count.tags} tag{dock._count.tags === 1 ? "" : "s"}</span>
-                </div>
+                <details>
+                  <summary className="cursor-pointer text-xs font-medium text-zinc-500 dark:text-zinc-500">
+                    Dwell trend (last {dwellTrend.length} weeks)
+                  </summary>
+                  <div className="mt-2 flex h-10 items-end gap-0.5">
+                    {dwellTrend.map((b) => (
+                      <div
+                        key={b.periodStart}
+                        title={
+                          b.averageDwellMinutes !== null
+                            ? `${b.periodStart} – ${b.periodEnd}: avg ${Math.round(b.averageDwellMinutes)} min vs ${Math.round(b.averageScheduledMinutes!)} min scheduled`
+                            : `${b.periodStart} – ${b.periodEnd}: insufficient data`
+                        }
+                        className={`flex-1 rounded-t ${
+                          b.averageDwellMinutes !== null ? "bg-foreground" : "bg-zinc-200 dark:bg-zinc-700"
+                        }`}
+                        style={{
+                          height: `${
+                            b.averageDwellMinutes !== null
+                              ? Math.max(2, Math.round((b.averageDwellMinutes / maxDwell) * 100))
+                              : 2
+                          }%`,
+                        }}
+                      />
+                    ))}
+                  </div>
+                </details>
               </li>
               );
             })}

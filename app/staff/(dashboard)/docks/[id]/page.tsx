@@ -3,7 +3,7 @@ import { notFound } from "next/navigation";
 import { revalidatePath } from "next/cache";
 import { prisma } from "@/lib/prisma";
 import { TagCategory } from "@/app/generated/prisma/client";
-import { computeDockDwellStats } from "@/lib/dock-dwell";
+import { computeDockDwellStats, computeDockDwellTrend } from "@/lib/dock-dwell";
 
 const DAY_NAMES = ["Sunday", "Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday"];
 
@@ -120,6 +120,8 @@ export default async function StaffDockDetailPage({ params }: { params: Promise<
   const hoursByDay = new Map(dock.operatingHours.map((h) => [h.dayOfWeek, h]));
   const assignedTagIds = new Set(dock.tags.map((dt) => dt.tagId));
   const dwell = await computeDockDwellStats(dockId);
+  const dwellTrend = await computeDockDwellTrend(dockId);
+  const maxDwell = Math.max(1, ...dwellTrend.map((b) => b.averageDwellMinutes ?? 0));
 
   return (
     <div className="flex flex-col gap-8">
@@ -133,6 +135,26 @@ export default async function StaffDockDetailPage({ params }: { params: Promise<
             ? `Avg dwell: ${Math.round(dwell.averageDwellMinutes)} min (scheduled: ${Math.round(dwell.averageScheduledMinutes!)} min) · ${dwell.sampleSize} completed bookings`
             : "Not enough completed bookings yet for a dwell-time average"}
         </p>
+        <div className="mt-2 flex h-10 items-end gap-0.5">
+          {dwellTrend.map((b) => (
+            <div
+              key={b.periodStart}
+              title={
+                b.averageDwellMinutes !== null
+                  ? `${b.periodStart} – ${b.periodEnd}: avg ${Math.round(b.averageDwellMinutes)} min vs ${Math.round(b.averageScheduledMinutes!)} min scheduled`
+                  : `${b.periodStart} – ${b.periodEnd}: insufficient data`
+              }
+              className={`flex-1 rounded-t ${
+                b.averageDwellMinutes !== null ? "bg-foreground" : "bg-zinc-200 dark:bg-zinc-700"
+              }`}
+              style={{
+                height: `${
+                  b.averageDwellMinutes !== null ? Math.max(2, Math.round((b.averageDwellMinutes / maxDwell) * 100)) : 2
+                }%`,
+              }}
+            />
+          ))}
+        </div>
       </div>
 
       <section>
