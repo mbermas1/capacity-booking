@@ -40,6 +40,13 @@ export class BookingNotFoundError extends Error {
   }
 }
 
+export class InvalidStatusTransitionError extends Error {
+  constructor(message: string) {
+    super(message);
+    this.name = "InvalidStatusTransitionError";
+  }
+}
+
 export class DockClosedError extends Error {
   constructor(reason: string) {
     super(reason);
@@ -256,6 +263,33 @@ async function runRescheduleBooking(
 
 export async function rescheduleBooking(bookingId: string, input: RescheduleBookingInput) {
   return prisma.$transaction((tx) => runRescheduleBooking(tx, bookingId, input));
+}
+
+/**
+ * Staff-witnessed physical arrival, not a self-service driver action (see
+ * project_notification_pattern / the no-show scoring discussion for why a
+ * self-reported check-in would undermine it as a trust-score input later).
+ * No notification: unlike confirm/cancel/reschedule/no-show, the carrier's
+ * own driver is physically present for this event.
+ */
+export async function checkInBooking(bookingId: string) {
+  return prisma.$transaction(async (tx) => {
+    const existing = await tx.booking.findUnique({ where: { id: bookingId } });
+    if (!existing) {
+      throw new BookingNotFoundError();
+    }
+    if (existing.status !== "SCHEDULED") {
+      throw new InvalidStatusTransitionError(
+        `Booking is ${existing.status.replace("_", " ").toLowerCase()}, not scheduled`,
+      );
+    }
+
+    return tx.booking.update({
+      where: { id: bookingId },
+      data: { status: "CHECKED_IN", checkedInAt: new Date() },
+      include: CARRIER_NAME_INCLUDE,
+    });
+  });
 }
 
 /**

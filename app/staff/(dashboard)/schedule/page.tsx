@@ -1,8 +1,25 @@
 import Link from "next/link";
+import { revalidatePath } from "next/cache";
 import { prisma } from "@/lib/prisma";
 import { getStaffMember } from "@/lib/staff-session";
-import { detectNoShowMany } from "@/lib/bookings";
+import { detectNoShowMany, checkInBooking } from "@/lib/bookings";
 import { STATUS_STYLES, LOAD_TYPE_STYLES, PRIORITY_STYLES, formatTime } from "@/lib/booking-display";
+
+async function checkIn(formData: FormData) {
+  "use server";
+
+  const staff = await getStaffMember();
+  if (!staff) return;
+
+  const bookingId = String(formData.get("bookingId") ?? "");
+  try {
+    await checkInBooking(bookingId);
+  } catch {
+    // booking already moved on (e.g. concurrent edit) — ignore, the re-render shows current state
+  }
+
+  revalidatePath("/staff/schedule");
+}
 
 function toISODate(date: Date): string {
   return date.toISOString().slice(0, 10);
@@ -157,6 +174,22 @@ export default async function StaffSchedulePage({
                             >
                               {booking.status.replace("_", " ")}
                             </span>
+                            {booking.status === "SCHEDULED" && (
+                              <form action={checkIn}>
+                                <input type="hidden" name="bookingId" value={booking.id} />
+                                <button
+                                  type="submit"
+                                  className="h-7 rounded-full border border-black/[.08] px-3 text-xs font-medium transition-colors hover:bg-black/[.04] dark:border-white/[.145] dark:hover:bg-[#1a1a1a]"
+                                >
+                                  Check In
+                                </button>
+                              </form>
+                            )}
+                            {booking.status === "CHECKED_IN" && booking.checkedInAt && (
+                              <span className="font-mono text-xs text-zinc-500 dark:text-zinc-400">
+                                arrived {formatTime(booking.checkedInAt)}
+                              </span>
+                            )}
                           </div>
                         </li>
                       );

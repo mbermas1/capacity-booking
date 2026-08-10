@@ -87,6 +87,7 @@ model Booking {
   priority        BookingPriority @default(STANDARD)
   shipmentVolume  Int?
   tags            BookingTag[]
+  checkedInAt     DateTime?
   createdAt       DateTime        @default(now())
   updatedAt       DateTime        @updatedAt
 
