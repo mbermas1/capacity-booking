@@ -30,6 +30,10 @@ async function assignWarehouseManager(accountId: string, formData: FormData) {
   const email = String(formData.get("email") ?? "").trim();
   const password = String(formData.get("password") ?? "");
   const warehouseId = String(formData.get("warehouseId") ?? "").trim();
+  const additionalWarehouseIds = formData
+    .getAll("additionalWarehouseIds")
+    .map(String)
+    .filter((id) => id !== warehouseId);
 
   if (!name || !email || !password || !warehouseId) {
     redirect("/staff/accounts?error=" + encodeURIComponent("Name, email, password, and warehouse are required."));
@@ -41,7 +45,7 @@ async function assignWarehouseManager(accountId: string, formData: FormData) {
   }
 
   try {
-    await prisma.staff.create({
+    const created = await prisma.staff.create({
       data: {
         name,
         email,
@@ -51,6 +55,15 @@ async function assignWarehouseManager(accountId: string, formData: FormData) {
         warehouseId,
       },
     });
+    if (additionalWarehouseIds.length > 0) {
+      const validIds = await prisma.warehouse.findMany({
+        where: { id: { in: additionalWarehouseIds }, accountId },
+        select: { id: true },
+      });
+      await prisma.staffWarehouse.createMany({
+        data: validIds.map((w) => ({ staffId: created.id, warehouseId: w.id })),
+      });
+    }
   } catch (error) {
     if (error instanceof Prisma.PrismaClientKnownRequestError && error.code === "P2002") {
       redirect("/staff/accounts?error=" + encodeURIComponent("A staff account with this email already exists."));
@@ -60,6 +73,74 @@ async function assignWarehouseManager(accountId: string, formData: FormData) {
 
   revalidatePath("/staff/accounts");
   redirect("/staff/accounts?message=" + encodeURIComponent("Warehouse Manager assigned."));
+}
+
+async function updateWarehouseManager(accountId: string, staffId: string, formData: FormData) {
+  "use server";
+
+  const staff = await getStaffMember();
+  if (!staff || !canAssignWarehouseManager(staff.role)) return;
+
+  const target = await prisma.staff.findUnique({ where: { id: staffId }, select: { accountId: true, role: true } });
+  if (!target || target.accountId !== accountId || target.role !== "WAREHOUSE_MANAGER") return;
+
+  const warehouseId = String(formData.get("warehouseId") ?? "").trim();
+  const additionalWarehouseIds = formData
+    .getAll("additionalWarehouseIds")
+    .map(String)
+    .filter((id) => id !== warehouseId);
+  const newPassword = String(formData.get("password") ?? "").trim();
+
+  if (!warehouseId) return;
+
+  const warehouse = await prisma.warehouse.findUnique({ where: { id: warehouseId }, select: { accountId: true } });
+  if (!warehouse || warehouse.accountId !== accountId) return;
+
+  await prisma.$transaction(async (tx) => {
+    await tx.staff.update({
+      where: { id: staffId },
+      data: {
+        warehouseId,
+        ...(newPassword ? { passwordHash: hashPassword(newPassword) } : {}),
+      },
+    });
+    await tx.staffWarehouse.deleteMany({ where: { staffId } });
+    if (additionalWarehouseIds.length > 0) {
+      const validIds = await tx.warehouse.findMany({
+        where: { id: { in: additionalWarehouseIds }, accountId },
+        select: { id: true },
+      });
+      await tx.staffWarehouse.createMany({
+        data: validIds.map((w) => ({ staffId, warehouseId: w.id })),
+      });
+    }
+  });
+
+  revalidatePath("/staff/accounts");
+  redirect("/staff/accounts?message=" + encodeURIComponent("Warehouse Manager updated."));
+}
+
+async function removeWarehouseManager(accountId: string, staffId: string) {
+  "use server";
+
+  const staff = await getStaffMember();
+  if (!staff || !canAssignWarehouseManager(staff.role)) return;
+
+  const target = await prisma.staff.findUnique({ where: { id: staffId }, select: { accountId: true, role: true } });
+  if (!target || target.accountId !== accountId || target.role !== "WAREHOUSE_MANAGER") return;
+
+  const managerCount = await prisma.staff.count({ where: { accountId, role: "WAREHOUSE_MANAGER" } });
+  if (managerCount <= 1) {
+    redirect(
+      "/staff/accounts?error=" +
+        encodeURIComponent("Can't remove the last Warehouse Manager for this account — assign a replacement first."),
+    );
+  }
+
+  await prisma.staff.delete({ where: { id: staffId } });
+
+  revalidatePath("/staff/accounts");
+  redirect("/staff/accounts?message=" + encodeURIComponent("Warehouse Manager removed."));
 }
 
 export default async function StaffAccountsPage({
@@ -82,7 +163,7 @@ export default async function StaffAccountsPage({
       staff: {
         where: { role: "WAREHOUSE_MANAGER" },
         orderBy: { name: "asc" },
-        include: { warehouse: true },
+        include: { warehouse: true, warehouseAccess: { include: { warehouse: true } } },
       },
       _count: { select: { warehouses: true, staff: true } },
     },
@@ -149,9 +230,89 @@ export default async function StaffAccountsPage({
                   </div>
 
                   {a.staff.length > 0 && (
-                    <p className="text-xs text-zinc-500 dark:text-zinc-400">
-                      Warehouse Managers: {a.staff.map((s) => `${s.name} (${s.warehouse?.name ?? "—"})`).join(", ")}
-                    </p>
+                    <div className="flex flex-col gap-2">
+                      <span className="text-xs font-medium text-zinc-600 dark:text-zinc-400">Warehouse Managers</span>
+                      {a.staff.map((s) => {
+                        const boundUpdate = updateWarehouseManager.bind(null, a.id, s.id);
+                        const boundRemove = removeWarehouseManager.bind(null, a.id, s.id);
+                        const additionalIds = new Set(s.warehouseAccess.map((wa) => wa.warehouseId));
+                        return (
+                          <div
+                            key={s.id}
+                            className="flex flex-col gap-2 rounded-xl border border-black/[.06] p-3 dark:border-white/[.08]"
+                          >
+                            <div className="flex flex-wrap items-center justify-between gap-2">
+                              <span className="text-xs text-zinc-600 dark:text-zinc-400">
+                                {s.name} · {s.email}
+                              </span>
+                              <form action={boundRemove}>
+                                <button
+                                  type="submit"
+                                  className="h-7 rounded-full border border-black/[.08] px-3 text-xs font-medium transition-colors hover:bg-black/[.04] dark:border-white/[.145] dark:hover:bg-[#1a1a1a]"
+                                >
+                                  Remove
+                                </button>
+                              </form>
+                            </div>
+                            <form action={boundUpdate} className="flex flex-wrap items-end gap-2">
+                              <div className="flex flex-col gap-1">
+                                <label htmlFor={`mgr-warehouseId-${s.id}`} className="text-xs text-zinc-600 dark:text-zinc-400">
+                                  Home Warehouse
+                                </label>
+                                <select
+                                  id={`mgr-warehouseId-${s.id}`}
+                                  name="warehouseId"
+                                  defaultValue={s.warehouseId ?? undefined}
+                                  className="h-9 rounded-lg border border-black/[.08] bg-white px-2 text-sm text-black dark:border-white/[.145] dark:bg-black dark:text-zinc-50"
+                                >
+                                  {a.warehouses.map((w) => (
+                                    <option key={w.id} value={w.id}>
+                                      {w.name}
+                                    </option>
+                                  ))}
+                                </select>
+                              </div>
+                              <div className="flex flex-col gap-1">
+                                <label htmlFor={`mgr-additional-${s.id}`} className="text-xs text-zinc-600 dark:text-zinc-400">
+                                  Additional Locations
+                                </label>
+                                <select
+                                  id={`mgr-additional-${s.id}`}
+                                  name="additionalWarehouseIds"
+                                  multiple
+                                  size={Math.min(4, a.warehouses.length || 1)}
+                                  defaultValue={Array.from(additionalIds)}
+                                  className="w-48 rounded-lg border border-black/[.08] bg-white px-2 py-1 text-sm text-black dark:border-white/[.145] dark:bg-black dark:text-zinc-50"
+                                >
+                                  {a.warehouses.map((w) => (
+                                    <option key={w.id} value={w.id}>
+                                      {w.name}
+                                    </option>
+                                  ))}
+                                </select>
+                              </div>
+                              <div className="flex flex-col gap-1">
+                                <label htmlFor={`mgr-password-${s.id}`} className="text-xs text-zinc-600 dark:text-zinc-400">
+                                  Reset Password (optional)
+                                </label>
+                                <input
+                                  id={`mgr-password-${s.id}`}
+                                  type="password"
+                                  name="password"
+                                  className="h-9 rounded-lg border border-black/[.08] bg-white px-2 text-sm text-black dark:border-white/[.145] dark:bg-black dark:text-zinc-50"
+                                />
+                              </div>
+                              <button
+                                type="submit"
+                                className="h-9 rounded-full border border-black/[.08] px-4 text-sm font-medium transition-colors hover:bg-black/[.04] dark:border-white/[.145] dark:hover:bg-[#1a1a1a]"
+                              >
+                                Save
+                              </button>
+                            </form>
+                          </div>
+                        );
+                      })}
+                    </div>
                   )}
 
                   {a.warehouses.length === 0 ? (
@@ -204,6 +365,24 @@ export default async function StaffAccountsPage({
                           id={`warehouseId-${a.id}`}
                           name="warehouseId"
                           className="h-9 rounded-lg border border-black/[.08] bg-white px-2 text-sm text-black dark:border-white/[.145] dark:bg-black dark:text-zinc-50"
+                        >
+                          {a.warehouses.map((w) => (
+                            <option key={w.id} value={w.id}>
+                              {w.name}
+                            </option>
+                          ))}
+                        </select>
+                      </div>
+                      <div className="flex flex-col gap-1">
+                        <label htmlFor={`additionalWarehouseIds-${a.id}`} className="text-xs text-zinc-600 dark:text-zinc-400">
+                          Additional Locations
+                        </label>
+                        <select
+                          id={`additionalWarehouseIds-${a.id}`}
+                          name="additionalWarehouseIds"
+                          multiple
+                          size={Math.min(4, a.warehouses.length || 1)}
+                          className="w-48 rounded-lg border border-black/[.08] bg-white px-2 py-1 text-sm text-black dark:border-white/[.145] dark:bg-black dark:text-zinc-50"
                         >
                           {a.warehouses.map((w) => (
                             <option key={w.id} value={w.id}>
