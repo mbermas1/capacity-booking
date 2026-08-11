@@ -1,6 +1,7 @@
+import { Fragment } from "react";
 import { redirect } from "next/navigation";
 import { revalidatePath } from "next/cache";
-import { ChevronDown, Landmark } from "lucide-react";
+import { ChevronDown, Landmark, Pencil } from "lucide-react";
 import { prisma } from "@/lib/prisma";
 import { hashPassword } from "@/lib/portal-auth";
 import { getStaffMember } from "@/lib/staff-session";
@@ -21,6 +22,32 @@ async function createAccount(formData: FormData) {
 
   revalidatePath("/staff/accounts");
   redirect("/staff/accounts?message=" + encodeURIComponent("Account created."));
+}
+
+async function updateAccount(accountId: string, formData: FormData) {
+  "use server";
+
+  const staff = await getStaffMember();
+  if (!staff || !canCreateAccount(staff.role)) return;
+
+  const name = String(formData.get("name") ?? "").trim();
+  if (!name) return;
+
+  await prisma.account.update({ where: { id: accountId }, data: { name } });
+
+  revalidatePath("/staff/accounts");
+  redirect("/staff/accounts?message=" + encodeURIComponent("Account updated."));
+}
+
+async function toggleAccountActive(accountId: string, currentlyActive: boolean) {
+  "use server";
+
+  const staff = await getStaffMember();
+  if (!staff || !canCreateAccount(staff.role)) return;
+
+  await prisma.account.update({ where: { id: accountId }, data: { active: !currentlyActive } });
+
+  revalidatePath("/staff/accounts");
 }
 
 async function assignWarehouseManager(accountId: string, formData: FormData) {
@@ -146,7 +173,7 @@ async function removeWarehouseManager(accountId: string, staffId: string) {
   redirect("/staff/accounts?message=" + encodeURIComponent("Warehouse Manager removed."));
 }
 
-const GRID_COLS = "grid-cols-[2fr_1fr_1fr_2fr_1.5rem]";
+const GRID_COLS = "grid-cols-[2fr_1fr_1fr_1.5fr_1fr_auto_1.5rem]";
 
 export default async function StaffAccountsPage({
   searchParams,
@@ -183,6 +210,8 @@ export default async function StaffAccountsPage({
         return (a._count.warehouses - b._count.warehouses) * dir;
       case "staff":
         return (a._count.staff - b._count.staff) * dir;
+      case "status":
+        return (Number(a.active) - Number(b.active)) * dir;
       default:
         return a.name.localeCompare(b.name) * dir;
     }
@@ -284,6 +313,8 @@ export default async function StaffAccountsPage({
           <SortableHeader label="Warehouses" sortKey="warehouses" basePath="/staff/accounts" searchParams={params} />
           <SortableHeader label="Staff" sortKey="staff" basePath="/staff/accounts" searchParams={params} />
           <span>Warehouse Managers</span>
+          <SortableHeader label="Status" sortKey="status" basePath="/staff/accounts" searchParams={params} />
+          <span />
           <span />
         </div>
 
@@ -292,8 +323,11 @@ export default async function StaffAccountsPage({
         ) : (
           sorted.map((a) => {
             const boundAssign = assignWarehouseManager.bind(null, a.id);
+            const boundToggleActive = toggleAccountActive.bind(null, a.id, a.active);
+            const boundUpdateAccount = updateAccount.bind(null, a.id);
             return (
-              <details key={a.id} className="group border-b border-black/[.06] last:border-b-0 dark:border-white/[.08]">
+              <Fragment key={a.id}>
+              <details className="group border-b border-black/[.06] last:border-b-0 dark:border-white/[.08]">
                 <summary
                   className={`grid ${GRID_COLS} cursor-pointer list-none items-center gap-4 px-4 py-3 text-sm hover:bg-black/[.02] dark:hover:bg-white/[.03]`}
                 >
@@ -302,6 +336,35 @@ export default async function StaffAccountsPage({
                   <span className="text-zinc-600 dark:text-zinc-400">{a._count.staff}</span>
                   <span className="truncate text-zinc-600 dark:text-zinc-400">
                     {a.staff.length > 0 ? a.staff.map((s) => s.name).join(", ") : "—"}
+                  </span>
+                  <span>
+                    <span
+                      className={`rounded-full px-2 py-0.5 text-xs font-medium ${
+                        a.active
+                          ? "bg-green-100 text-green-800 dark:bg-green-950 dark:text-green-300"
+                          : "bg-zinc-100 text-zinc-600 dark:bg-zinc-800 dark:text-zinc-400"
+                      }`}
+                    >
+                      {a.active ? "Active" : "Inactive"}
+                    </span>
+                  </span>
+                  <span className="flex items-center gap-1">
+                    <button
+                      type="button"
+                      popoverTarget={`edit-account-${a.id}`}
+                      title="Edit account"
+                      className="flex h-7 w-7 items-center justify-center rounded-full border border-black/[.08] transition-colors hover:bg-black/[.04] dark:border-white/[.145] dark:hover:bg-[#1a1a1a]"
+                    >
+                      <Pencil className="h-3.5 w-3.5" />
+                    </button>
+                    <form action={boundToggleActive}>
+                      <button
+                        type="submit"
+                        className="h-7 rounded-full border border-black/[.08] px-3 text-xs font-medium whitespace-nowrap transition-colors hover:bg-black/[.04] dark:border-white/[.145] dark:hover:bg-[#1a1a1a]"
+                      >
+                        {a.active ? "Deactivate" : "Reactivate"}
+                      </button>
+                    </form>
                   </span>
                   <ChevronDown className="h-4 w-4 text-zinc-400 transition-transform group-open:rotate-180" />
                 </summary>
@@ -478,6 +541,54 @@ export default async function StaffAccountsPage({
                   )}
                 </div>
               </details>
+
+              <div
+                id={`edit-account-${a.id}`}
+                popover="auto"
+                className="w-full max-w-md rounded-2xl border border-black/[.08] bg-white shadow-xl dark:border-white/[.145] dark:bg-[#0a0a0a]"
+              >
+                <div className="flex items-start gap-3 border-b border-black/[.06] p-5 dark:border-white/[.08]">
+                  <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg bg-blue-100 text-blue-700 dark:bg-blue-950 dark:text-blue-300">
+                    <Pencil className="h-4.5 w-4.5" />
+                  </div>
+                  <div>
+                    <h2 className="text-base font-semibold text-black dark:text-zinc-50">Edit Account</h2>
+                    <p className="text-xs text-zinc-500 dark:text-zinc-400">Update this account&apos;s name</p>
+                  </div>
+                </div>
+                <form action={boundUpdateAccount} className="flex flex-col gap-4 p-5">
+                  <div className="flex flex-col gap-1">
+                    <label htmlFor={`edit-name-${a.id}`} className="text-sm font-medium text-zinc-700 dark:text-zinc-300">
+                      Account Name
+                    </label>
+                    <input
+                      id={`edit-name-${a.id}`}
+                      name="name"
+                      type="text"
+                      required
+                      defaultValue={a.name}
+                      className="h-10 rounded-lg border border-black/[.08] bg-white px-3 text-sm text-black dark:border-white/[.145] dark:bg-black dark:text-zinc-50"
+                    />
+                  </div>
+                  <div className="flex justify-end gap-2 border-t border-black/[.06] pt-4 dark:border-white/[.08]">
+                    <button
+                      type="button"
+                      popoverTarget={`edit-account-${a.id}`}
+                      popoverTargetAction="hide"
+                      className="h-10 rounded-full border border-black/[.08] px-4 text-sm font-medium transition-colors hover:bg-black/[.04] dark:border-white/[.145] dark:hover:bg-[#1a1a1a]"
+                    >
+                      Cancel
+                    </button>
+                    <button
+                      type="submit"
+                      className="h-10 rounded-full bg-foreground px-4 text-sm font-medium text-background transition-colors hover:bg-[#383838] dark:hover:bg-[#ccc]"
+                    >
+                      Save
+                    </button>
+                  </div>
+                </form>
+              </div>
+              </Fragment>
             );
           })
         )}

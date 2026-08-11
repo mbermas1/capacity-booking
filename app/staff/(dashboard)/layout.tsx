@@ -88,8 +88,9 @@ export default async function StaffDashboardLayout({ children }: { children: Rea
   return (
     <div className="flex min-h-full flex-1 bg-zinc-50 font-sans dark:bg-black">
       <SidebarShell>
-        <div className="flex flex-col gap-3 px-5 py-5">
-          <Image src="/logo.png" alt="CapacityBooking" width={159} height={40} className="h-8 w-auto" priority />
+        <div className="sidebar-header flex flex-col gap-3">
+          <Image src="/logo.png" alt="CapacityBooking" width={159} height={40} className="logo-full h-8 w-auto" priority />
+          <Image src="/logo-mark.png" alt="CapacityBooking" width={32} height={32} className="logo-mark h-8 w-8" priority />
           <div className="sidebar-label flex flex-col">
             <span className="text-sm font-semibold text-black dark:text-zinc-50">
               {staff?.warehouse ? staff.warehouse.name : "All Accounts"}

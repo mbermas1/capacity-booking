@@ -41,6 +41,22 @@ aside.sidebar[data-collapsed="true"] .nav-link {
   padding-left: 0;
   padding-right: 0;
 }
+aside.sidebar .sidebar-header {
+  padding: 1.25rem;
+}
+aside.sidebar[data-collapsed="true"] .sidebar-header {
+  padding: 1.25rem 0.5rem;
+  align-items: center;
+}
+aside.sidebar .logo-mark {
+  display: none;
+}
+aside.sidebar[data-collapsed="true"] .logo-full {
+  display: none;
+}
+aside.sidebar[data-collapsed="true"] .logo-mark {
+  display: block;
+}
 
 /* Modal popovers (Accounts/Warehouses "Add" buttons) */
 [popover] {

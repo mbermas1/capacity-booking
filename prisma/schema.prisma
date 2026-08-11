@@ -15,6 +15,7 @@ datasource db {
 model Account {
   id         String      @id @default(cuid())
   name       String
+  active     Boolean     @default(true) // false = blocks new booking creation/reschedule at every warehouse under this account
   warehouses Warehouse[]
   staff      Staff[]
   carriers   Carrier[]

@@ -148,14 +148,18 @@ async function validateBookingSlot(tx: Prisma.TransactionClient, params: Validat
 
   const dock = await tx.dock.findUnique({
     where: { id: dockId },
-    include: { operatingHours: true, tags: { include: { tag: true } }, warehouse: { select: { active: true } } },
+    include: {
+      operatingHours: true,
+      tags: { include: { tag: true } },
+      warehouse: { select: { active: true, account: { select: { active: true } } } },
+    },
   });
 
   if (!dock) {
     throw new DockNotFoundError();
   }
 
-  if (!dock.warehouse.active) {
+  if (!dock.warehouse.active || !dock.warehouse.account.active) {
     throw new WarehouseInactiveError();
   }
 

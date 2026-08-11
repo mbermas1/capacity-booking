@@ -1,7 +1,8 @@
 import { randomBytes } from "node:crypto";
+import { Fragment } from "react";
 import { redirect } from "next/navigation";
 import { revalidatePath } from "next/cache";
-import { Building2, Warehouse as WarehouseIcon } from "lucide-react";
+import { Building2, Pencil, Warehouse as WarehouseIcon } from "lucide-react";
 import { prisma } from "@/lib/prisma";
 import { hashPassword } from "@/lib/portal-auth";
 import { getStaffMember } from "@/lib/staff-session";
@@ -64,6 +65,22 @@ async function toggleWarehouseActive(warehouseId: string, currentlyActive: boole
   await prisma.warehouse.update({ where: { id: warehouseId }, data: { active: !currentlyActive } });
 
   revalidatePath("/staff/warehouses");
+}
+
+async function updateWarehouse(warehouseId: string, formData: FormData) {
+  "use server";
+
+  const staff = await getStaffMember();
+  if (!staff || !canCreateWarehouse(staff.role)) return;
+
+  const name = String(formData.get("name") ?? "").trim();
+  const location = String(formData.get("location") ?? "").trim();
+  if (!name || !location) return;
+
+  await prisma.warehouse.update({ where: { id: warehouseId }, data: { name, location } });
+
+  revalidatePath("/staff/warehouses");
+  redirect("/staff/warehouses?message=" + encodeURIComponent("Warehouse updated."));
 }
 
 const GRID_COLS = "grid-cols-[2fr_1.5fr_1.5fr_1fr_1fr_1fr_auto]";
@@ -332,9 +349,10 @@ export default async function StaffWarehousesPage({
         ) : (
           sorted.map((w) => {
             const boundToggle = toggleWarehouseActive.bind(null, w.id, w.active);
+            const boundUpdate = updateWarehouse.bind(null, w.id);
             return (
+              <Fragment key={w.id}>
               <div
-                key={w.id}
                 className={`grid ${GRID_COLS} items-center gap-4 border-b border-black/[.06] px-4 py-3 text-sm last:border-b-0 dark:border-white/[.08]`}
               >
                 <span className="font-medium text-black dark:text-zinc-50">{w.name}</span>
@@ -356,15 +374,90 @@ export default async function StaffWarehousesPage({
                     {w.active ? "Active" : "Inactive"}
                   </span>
                 </span>
-                <form action={boundToggle}>
+                <span className="flex items-center gap-1">
                   <button
-                    type="submit"
-                    className="h-8 rounded-full border border-black/[.08] px-3 text-xs font-medium whitespace-nowrap transition-colors hover:bg-black/[.04] dark:border-white/[.145] dark:hover:bg-[#1a1a1a]"
+                    type="button"
+                    popoverTarget={`edit-warehouse-${w.id}`}
+                    title="Edit warehouse"
+                    className="flex h-7 w-7 items-center justify-center rounded-full border border-black/[.08] transition-colors hover:bg-black/[.04] dark:border-white/[.145] dark:hover:bg-[#1a1a1a]"
                   >
-                    {w.active ? "Deactivate" : "Reactivate"}
+                    <Pencil className="h-3.5 w-3.5" />
                   </button>
+                  <form action={boundToggle}>
+                    <button
+                      type="submit"
+                      className="h-7 rounded-full border border-black/[.08] px-3 text-xs font-medium whitespace-nowrap transition-colors hover:bg-black/[.04] dark:border-white/[.145] dark:hover:bg-[#1a1a1a]"
+                    >
+                      {w.active ? "Deactivate" : "Reactivate"}
+                    </button>
+                  </form>
+                </span>
+              </div>
+
+              <div
+                id={`edit-warehouse-${w.id}`}
+                popover="auto"
+                className="w-full max-w-md rounded-2xl border border-black/[.08] bg-white shadow-xl dark:border-white/[.145] dark:bg-[#0a0a0a]"
+              >
+                <div className="flex items-start gap-3 border-b border-black/[.06] p-5 dark:border-white/[.08]">
+                  <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg bg-amber-100 text-amber-700 dark:bg-amber-950 dark:text-amber-300">
+                    <Pencil className="h-4.5 w-4.5" />
+                  </div>
+                  <div>
+                    <h2 className="text-base font-semibold text-black dark:text-zinc-50">Edit Warehouse</h2>
+                    <p className="text-xs text-zinc-500 dark:text-zinc-400">{w.account.name}</p>
+                  </div>
+                </div>
+                <form action={boundUpdate} className="flex flex-col gap-4 p-5">
+                  <div className="flex flex-col gap-1">
+                    <label htmlFor={`edit-name-${w.id}`} className="text-sm font-medium text-zinc-700 dark:text-zinc-300">
+                      Name
+                    </label>
+                    <input
+                      id={`edit-name-${w.id}`}
+                      name="name"
+                      type="text"
+                      required
+                      defaultValue={w.name}
+                      className="h-10 rounded-lg border border-black/[.08] bg-white px-3 text-sm text-black dark:border-white/[.145] dark:bg-black dark:text-zinc-50"
+                    />
+                  </div>
+                  <div className="flex flex-col gap-1">
+                    <label htmlFor={`edit-location-${w.id}`} className="text-sm font-medium text-zinc-700 dark:text-zinc-300">
+                      Location
+                    </label>
+                    <input
+                      id={`edit-location-${w.id}`}
+                      name="location"
+                      type="text"
+                      required
+                      defaultValue={w.location}
+                      className="h-10 rounded-lg border border-black/[.08] bg-white px-3 text-sm text-black dark:border-white/[.145] dark:bg-black dark:text-zinc-50"
+                    />
+                  </div>
+                  <p className="text-xs text-zinc-500 dark:text-zinc-500">
+                    To move this warehouse to a different account, deactivate it here and create a new one under the
+                    target account instead — reassigning would desync any staff already assigned to it.
+                  </p>
+                  <div className="flex justify-end gap-2 border-t border-black/[.06] pt-4 dark:border-white/[.08]">
+                    <button
+                      type="button"
+                      popoverTarget={`edit-warehouse-${w.id}`}
+                      popoverTargetAction="hide"
+                      className="h-10 rounded-full border border-black/[.08] px-4 text-sm font-medium transition-colors hover:bg-black/[.04] dark:border-white/[.145] dark:hover:bg-[#1a1a1a]"
+                    >
+                      Cancel
+                    </button>
+                    <button
+                      type="submit"
+                      className="h-10 rounded-full bg-foreground px-4 text-sm font-medium text-background transition-colors hover:bg-[#383838] dark:hover:bg-[#ccc]"
+                    >
+                      Save
+                    </button>
+                  </div>
                 </form>
               </div>
+              </Fragment>
             );
           })
         )}
