@@ -70,8 +70,11 @@ model Dock {
 }
 
 enum DockEquipmentType {
-  STANDARD
-  GROUND_LEVEL
+  FLUSH
+  ENCLOSED
+  DRIVE_IN
+  SAWTOOTH
+  OPEN
 }
 
 model Carrier {
