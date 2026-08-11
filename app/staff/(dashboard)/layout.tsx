@@ -4,6 +4,7 @@ import { redirect } from "next/navigation";
 import { getStaffMember, requireStaffSession, STAFF_SESSION_COOKIE } from "@/lib/staff-session";
 import {
   canApproveRequests,
+  canCreateWarehouse,
   canManageCapacityRules,
   canManageStaff,
   canManageTagDefinitions,
@@ -45,6 +46,11 @@ export default async function StaffDashboardLayout({ children }: { children: Rea
             </div>
           </div>
           <nav className="flex items-center gap-4 text-sm font-medium text-zinc-600 dark:text-zinc-400">
+            {staff && canCreateWarehouse(staff.role) && (
+              <Link href="/staff/warehouses" className="hover:text-black dark:hover:text-zinc-50">
+                Warehouses
+              </Link>
+            )}
             {staff && staff.role !== "DOCK_STAFF" && (
               <Link href="/staff" className="hover:text-black dark:hover:text-zinc-50">
                 Carriers
