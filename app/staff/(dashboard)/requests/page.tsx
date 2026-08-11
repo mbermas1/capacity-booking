@@ -3,6 +3,7 @@ import { randomBytes } from "node:crypto";
 import { prisma } from "@/lib/prisma";
 import { getStaffMember } from "@/lib/staff-session";
 import { canAccessWarehouse, canApproveRequests, getWarehouseScope, warehouseWhereClause } from "@/lib/staff-roles";
+import { findOrCreateCarrierByName } from "@/lib/carrier-identity";
 import { formatTime } from "@/lib/booking-display";
 import {
   BookingOverlapError,
@@ -46,10 +47,8 @@ async function approveRequest(requestId: string) {
   const params = new URLSearchParams();
 
   try {
-    const carrier = await prisma.carrier.upsert({
-      where: { name: bookingRequest.companyName },
-      create: { name: bookingRequest.companyName, email: bookingRequest.contactEmail },
-      update: {},
+    const carrier = await findOrCreateCarrierByName(prisma, bookingRequest.companyName, {
+      email: bookingRequest.contactEmail,
     });
 
     await createBooking({

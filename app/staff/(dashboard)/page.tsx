@@ -3,6 +3,7 @@ import { prisma } from "@/lib/prisma";
 import { hashPassword } from "@/lib/portal-auth";
 import { getStaffMember } from "@/lib/staff-session";
 import { canManageCarrierAccounts } from "@/lib/staff-roles";
+import { normalizeCarrierName } from "@/lib/carrier-identity";
 import { PartnerType } from "@/app/generated/prisma/client";
 import { PARTNER_TYPE_LABELS } from "@/lib/partner-type";
 import { computeCarrierScore, computeCarrierScoreTrend, type CarrierScore } from "@/lib/carrier-score";
@@ -65,9 +66,10 @@ async function createCarrierAccount(formData: FormData) {
 
   if (!name || !contactName || !contactEmail || !password) return;
 
+  const nameKey = normalizeCarrierName(name);
   const carrier = await prisma.carrier.upsert({
-    where: { name },
-    create: { name, email: notificationEmail || undefined, partnerType },
+    where: { nameKey },
+    create: { name, nameKey, email: notificationEmail || undefined, partnerType },
     update: { email: notificationEmail || undefined, partnerType },
   });
 

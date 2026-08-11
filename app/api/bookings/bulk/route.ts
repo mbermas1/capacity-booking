@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { withCarrierName } from "@/lib/booking-response";
 import { createBookingWithTx } from "@/lib/bookings";
+import { findOrCreateCarrierByName } from "@/lib/carrier-identity";
 import { prisma } from "@/lib/prisma";
 import { BookingStatus, BookingPriority, LoadType } from "@/app/generated/prisma/client";
 
@@ -173,11 +174,7 @@ export async function POST(request: NextRequest) {
       for (let index = 0; index < parsed.length; index++) {
         const item = parsed[index];
 
-        const carrier = await tx.carrier.upsert({
-          where: { name: item.carrierName },
-          create: { name: item.carrierName },
-          update: {},
-        });
+        const carrier = await findOrCreateCarrierByName(tx, item.carrierName);
 
         try {
           created.push(

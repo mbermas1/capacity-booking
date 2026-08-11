@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { getStaffSession } from "@/lib/staff-session";
 import { hashPassword } from "@/lib/portal-auth";
+import { normalizeCarrierName } from "@/lib/carrier-identity";
 import { PartnerType } from "@/app/generated/prisma/client";
 
 type CreateCarrierAccountBody = {
@@ -56,9 +57,10 @@ export async function POST(request: NextRequest) {
   const passwordHash = hashPassword(body.password as string);
   const partnerType = body.partnerType as PartnerType | undefined;
 
+  const nameKey = normalizeCarrierName(name);
   const carrier = await prisma.carrier.upsert({
-    where: { name },
-    create: { name, email: notificationEmail, ...(partnerType !== undefined ? { partnerType } : {}) },
+    where: { nameKey },
+    create: { name, nameKey, email: notificationEmail, ...(partnerType !== undefined ? { partnerType } : {}) },
     update: { email: notificationEmail, ...(partnerType !== undefined ? { partnerType } : {}) },
   });
 

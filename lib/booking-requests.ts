@@ -1,6 +1,7 @@
 import { randomBytes } from "node:crypto";
 import { prisma } from "@/lib/prisma";
 import { getPublicDockAvailability } from "@/lib/availability";
+import { findOrCreateCarrierByName } from "@/lib/carrier-identity";
 import { sendVerificationEmail } from "@/lib/email";
 import {
   createBooking,
@@ -162,10 +163,8 @@ export async function verifyBookingRequestEmail(token: string): Promise<VerifyBo
 
   if (!bookingRequest.dock.requiresManualReview) {
     try {
-      const carrier = await prisma.carrier.upsert({
-        where: { name: bookingRequest.companyName },
-        create: { name: bookingRequest.companyName, email: bookingRequest.contactEmail },
-        update: {},
+      const carrier = await findOrCreateCarrierByName(prisma, bookingRequest.companyName, {
+        email: bookingRequest.contactEmail,
       });
 
       await createBooking({

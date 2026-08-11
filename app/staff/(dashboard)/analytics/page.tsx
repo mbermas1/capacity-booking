@@ -2,6 +2,7 @@ import Link from "next/link";
 import { prisma } from "@/lib/prisma";
 import { getStaffMember } from "@/lib/staff-session";
 import { canViewReports, getWarehouseScope, warehouseWhereClause } from "@/lib/staff-roles";
+import { normalizeCarrierName } from "@/lib/carrier-identity";
 import { computeUtilization, computeUtilizationTrend } from "@/lib/utilization";
 import { computeDockDwellStats, computeDockDwellTrend } from "@/lib/dock-dwell";
 import { computeCarrierScore, computeCarrierScoreTrend, type CarrierScore } from "@/lib/carrier-score";
@@ -131,7 +132,10 @@ export default async function StaffAnalyticsPage({
   let carrierScore: CarrierScore | null = null;
   let carrierScoreTrend: Awaited<ReturnType<typeof computeCarrierScoreTrend>> | null = null;
   if (carrierName) {
-    filteredCarrier = await prisma.carrier.findFirst({ where: { name: carrierName }, select: { id: true, name: true } });
+    filteredCarrier = await prisma.carrier.findFirst({
+      where: { nameKey: normalizeCarrierName(carrierName) },
+      select: { id: true, name: true },
+    });
     if (filteredCarrier) {
       [carrierScore, carrierScoreTrend] = await Promise.all([
         computeCarrierScore(filteredCarrier.id),

@@ -54,7 +54,8 @@ model Dock {
 
 model Carrier {
   id                  String               @id @default(cuid())
-  name                String               @unique
+  name                String               @unique // display name, preserves original casing
+  nameKey             String               @unique // trim().toLowerCase() of name — the real identity/matching key
   email               String?              @unique // company notification address (confirm/cancel/reschedule/no-show emails) — not a login
   partnerType         PartnerType          @default(CARRIER)
   users               CarrierUser[]

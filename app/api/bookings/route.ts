@@ -13,6 +13,7 @@ import {
   detectNoShowMany,
 } from "@/lib/bookings";
 import { CARRIER_NAME_INCLUDE, withCarrierName } from "@/lib/booking-response";
+import { findOrCreateCarrierByName } from "@/lib/carrier-identity";
 import { prisma } from "@/lib/prisma";
 import { BookingStatus, BookingPriority, LoadType } from "@/app/generated/prisma/client";
 
@@ -157,11 +158,7 @@ export async function POST(request: NextRequest) {
 
   try {
     const carrierName = (body.carrierName as string).trim();
-    const carrier = await prisma.carrier.upsert({
-      where: { name: carrierName },
-      create: { name: carrierName },
-      update: {},
-    });
+    const carrier = await findOrCreateCarrierByName(prisma, carrierName);
 
     const booking = await createBooking({
       dockId: body.dockId as string,
