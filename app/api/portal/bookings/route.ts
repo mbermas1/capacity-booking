@@ -9,6 +9,7 @@ import {
   LeadTimeError,
   LaborCapacityError,
   YardCapacityError,
+  WarehouseInactiveError,
   createBooking,
   notifyBookingConfirmed,
   detectNoShowMany,
@@ -198,7 +199,8 @@ export async function POST(request: NextRequest) {
       error instanceof MinimumDurationError ||
       error instanceof LeadTimeError ||
       error instanceof LaborCapacityError ||
-      error instanceof YardCapacityError
+      error instanceof YardCapacityError ||
+      error instanceof WarehouseInactiveError
     ) {
       return NextResponse.json({ error: error.message }, { status: 409 });
     }

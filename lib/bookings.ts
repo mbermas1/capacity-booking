@@ -55,6 +55,13 @@ export class DockClosedError extends Error {
   }
 }
 
+export class WarehouseInactiveError extends Error {
+  constructor() {
+    super("This warehouse is not currently accepting bookings");
+    this.name = "WarehouseInactiveError";
+  }
+}
+
 export class MissingCarrierTagError extends Error {
   constructor(public missingTagNames: string[]) {
     super(`Carrier is missing required tag(s): ${missingTagNames.join(", ")}`);
@@ -141,11 +148,15 @@ async function validateBookingSlot(tx: Prisma.TransactionClient, params: Validat
 
   const dock = await tx.dock.findUnique({
     where: { id: dockId },
-    include: { operatingHours: true, tags: { include: { tag: true } } },
+    include: { operatingHours: true, tags: { include: { tag: true } }, warehouse: { select: { active: true } } },
   });
 
   if (!dock) {
     throw new DockNotFoundError();
+  }
+
+  if (!dock.warehouse.active) {
+    throw new WarehouseInactiveError();
   }
 
   const hoursViolation = checkOperatingHours(dock.operatingHours, startTime, endTime);

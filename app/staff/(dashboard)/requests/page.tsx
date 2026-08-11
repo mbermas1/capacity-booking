@@ -14,6 +14,7 @@ import {
   MinimumDurationError,
   LaborCapacityError,
   YardCapacityError,
+  WarehouseInactiveError,
   createBooking,
 } from "@/lib/bookings";
 
@@ -78,7 +79,8 @@ async function approveRequest(requestId: string) {
       error instanceof UnacceptedCommodityError ||
       error instanceof MinimumDurationError ||
       error instanceof LaborCapacityError ||
-      error instanceof YardCapacityError
+      error instanceof YardCapacityError ||
+      error instanceof WarehouseInactiveError
     ) {
       reason = error.message;
     } else {

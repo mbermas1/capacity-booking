@@ -9,6 +9,7 @@ import {
   LeadTimeError,
   LaborCapacityError,
   YardCapacityError,
+  WarehouseInactiveError,
   rescheduleBooking,
   notifyBookingRescheduled,
 } from "@/lib/bookings";
@@ -101,7 +102,8 @@ export async function PATCH(request: NextRequest, { params }: { params: Promise<
       error instanceof MinimumDurationError ||
       error instanceof LeadTimeError ||
       error instanceof LaborCapacityError ||
-      error instanceof YardCapacityError
+      error instanceof YardCapacityError ||
+      error instanceof WarehouseInactiveError
     ) {
       return NextResponse.json({ error: error.message }, { status: 409 });
     }

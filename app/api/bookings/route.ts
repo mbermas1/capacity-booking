@@ -8,6 +8,7 @@ import {
   MinimumDurationError,
   LaborCapacityError,
   YardCapacityError,
+  WarehouseInactiveError,
   createBooking,
   notifyBookingConfirmed,
   detectNoShowMany,
@@ -196,7 +197,8 @@ export async function POST(request: NextRequest) {
       error instanceof UnacceptedCommodityError ||
       error instanceof MinimumDurationError ||
       error instanceof LaborCapacityError ||
-      error instanceof YardCapacityError
+      error instanceof YardCapacityError ||
+      error instanceof WarehouseInactiveError
     ) {
       return NextResponse.json({ error: error.message }, { status: 409 });
     }

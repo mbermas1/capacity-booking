@@ -32,6 +32,7 @@ model Warehouse {
   detentionFreeMinutes Int? // grace period before detention accrues; null (with a rate set) = no grace period
   account              Account          @relation(fields: [accountId], references: [id])
   accountId            String // the tenant that owns this warehouse
+  active               Boolean          @default(true) // false = blocks new booking creation/reschedule; everything else stays visible
   docks                Dock[]
   staff                Staff[]
   staffAccess          StaffWarehouse[]

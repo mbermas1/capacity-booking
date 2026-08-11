@@ -11,6 +11,7 @@ import {
   LeadTimeError,
   LaborCapacityError,
   YardCapacityError,
+  WarehouseInactiveError,
   createBooking,
   notifyBookingConfirmed,
 } from "@/lib/bookings";
@@ -105,6 +106,8 @@ async function bookSlot(formData: FormData) {
       params.set("error", "labor");
     } else if (error instanceof YardCapacityError) {
       params.set("error", "yard");
+    } else if (error instanceof WarehouseInactiveError) {
+      params.set("error", "warehouse-inactive");
     } else {
       throw error;
     }
@@ -244,6 +247,11 @@ export default async function PortalBookPage({
       {error === "yard" && (
         <p className="rounded-lg bg-red-100 px-3 py-2 text-sm text-red-800 dark:bg-red-950 dark:text-red-300">
           The yard is at capacity for this window. Pick a different time.
+        </p>
+      )}
+      {error === "warehouse-inactive" && (
+        <p className="rounded-lg bg-red-100 px-3 py-2 text-sm text-red-800 dark:bg-red-950 dark:text-red-300">
+          This warehouse is not currently accepting bookings.
         </p>
       )}
 

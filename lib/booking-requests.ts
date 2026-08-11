@@ -13,6 +13,7 @@ import {
   BookingOverlapError,
   LaborCapacityError,
   YardCapacityError,
+  WarehouseInactiveError,
 } from "@/lib/bookings";
 import type { LoadType } from "@/app/generated/prisma/client";
 
@@ -52,7 +53,8 @@ function describeCreateBookingError(error: unknown): string {
     error instanceof MinimumDurationError ||
     error instanceof BookingOverlapError ||
     error instanceof LaborCapacityError ||
-    error instanceof YardCapacityError
+    error instanceof YardCapacityError ||
+    error instanceof WarehouseInactiveError
   ) {
     return error.message;
   }
