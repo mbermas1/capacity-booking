@@ -2,8 +2,36 @@ import { revalidatePath } from "next/cache";
 import { prisma } from "@/lib/prisma";
 import { getStaffMember } from "@/lib/staff-session";
 import { canAccessWarehouse, canManageCapacityRules, getWarehouseScope } from "@/lib/staff-roles";
+import { computeWarehouseLoad, type WarehouseLoad } from "@/lib/capacity-utilization";
+import { activeLaborHeadcount, type LaborShiftLike } from "@/lib/booking-constraints";
 
 const DAY_NAMES = ["Sunday", "Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday"];
+
+function UtilizationBars({ hourly, capacityAt }: { hourly: WarehouseLoad["hourly"]; capacityAt: (hour: number) => number | null }) {
+  const maxBookings = Math.max(1, ...hourly.map((h) => h.concurrentBookings));
+  return (
+    <div className="flex h-10 items-end gap-0.5">
+      {hourly.map((h) => {
+        const capacity = capacityAt(h.hour);
+        const atCapacity = capacity !== null && h.concurrentBookings >= capacity;
+        return (
+          <div
+            key={h.hour}
+            title={`${String(h.hour).padStart(2, "0")}:00 — ${h.concurrentBookings} booked${capacity !== null ? ` / ${capacity} capacity` : ""}`}
+            className={`flex-1 rounded-t ${
+              h.concurrentBookings === 0
+                ? "bg-zinc-200 dark:bg-zinc-700"
+                : atCapacity
+                  ? "bg-red-500 dark:bg-red-600"
+                  : "bg-foreground"
+            }`}
+            style={{ height: `${Math.max(2, Math.round((h.concurrentBookings / maxBookings) * 100))}%` }}
+          />
+        );
+      })}
+    </div>
+  );
+}
 
 async function updateYardCapacity(warehouseId: string, formData: FormData) {
   "use server";
@@ -73,6 +101,17 @@ export default async function StaffCapacityPage() {
     include: { yardCapacity: true, laborShifts: true },
   });
 
+  const now = new Date();
+  const todayStart = new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), now.getUTCDate()));
+  const loadByWarehouse = new Map(
+    await Promise.all(
+      warehouses.map(async (w) => {
+        const configured = w.yardCapacity !== null || w.laborShifts.length > 0;
+        return [w.id, configured ? await computeWarehouseLoad(w.id, todayStart, now) : null] as const;
+      }),
+    ),
+  );
+
   return (
     <div className="flex flex-col gap-10">
       <h1 className="text-xl font-semibold text-black dark:text-zinc-50">Labor &amp; Yard Capacity</h1>
@@ -86,9 +125,44 @@ export default async function StaffCapacityPage() {
       ) : (
         warehouses.map((w) => {
           const shiftsByDay = new Map(w.laborShifts.map((s) => [s.dayOfWeek, s]));
+          const load = loadByWarehouse.get(w.id) ?? null;
+          const laborShiftLikes: LaborShiftLike[] = w.laborShifts;
           return (
             <section key={w.id} className="flex flex-col gap-4">
               <h2 className="text-lg font-medium text-black dark:text-zinc-50">{w.name}</h2>
+
+              {load && (
+                <div className="flex flex-col gap-4 rounded-2xl border border-black/[.08] bg-white p-5 dark:border-white/[.145] dark:bg-[#0a0a0a]">
+                  <h3 className="text-sm font-medium text-black dark:text-zinc-50">Today&rsquo;s Load (UTC)</h3>
+                  {w.yardCapacity && (
+                    <div className="flex flex-col gap-1">
+                      <span className="text-xs text-zinc-600 dark:text-zinc-400">
+                        Yard: {load.currentBookings} of {w.yardCapacity.trailerSlots} slot
+                        {w.yardCapacity.trailerSlots === 1 ? "" : "s"} in use now
+                      </span>
+                      <UtilizationBars hourly={load.hourly} capacityAt={() => w.yardCapacity!.trailerSlots} />
+                    </div>
+                  )}
+                  {w.laborShifts.length > 0 && (
+                    <div className="flex flex-col gap-1">
+                      <span className="text-xs text-zinc-600 dark:text-zinc-400">
+                        {(() => {
+                          const nowHeadcount = activeLaborHeadcount(laborShiftLikes, now);
+                          return nowHeadcount === null
+                            ? "Labor: no shift scheduled right now"
+                            : `Labor: ${load.currentBookings} of ${nowHeadcount} worker${nowHeadcount === 1 ? "" : "s"} in use now`;
+                        })()}
+                      </span>
+                      <UtilizationBars
+                        hourly={load.hourly}
+                        capacityAt={(hour) =>
+                          activeLaborHeadcount(laborShiftLikes, new Date(todayStart.getTime() + hour * 60 * 60 * 1000))
+                        }
+                      />
+                    </div>
+                  )}
+                </div>
+              )}
 
               <div className="rounded-2xl border border-black/[.08] bg-white p-5 dark:border-white/[.145] dark:bg-[#0a0a0a]">
                 <h3 className="mb-3 text-sm font-medium text-black dark:text-zinc-50">Yard Capacity</h3>
