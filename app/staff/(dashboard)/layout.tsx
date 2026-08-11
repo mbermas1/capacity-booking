@@ -1,3 +1,4 @@
+import Image from "next/image";
 import Link from "next/link";
 import { cookies } from "next/headers";
 import { redirect } from "next/navigation";
@@ -29,9 +30,12 @@ export default async function StaffDashboardLayout({ children }: { children: Rea
       <header className="no-print border-b border-black/[.08] bg-white dark:border-white/[.145] dark:bg-[#0a0a0a]">
         <div className="mx-auto flex w-full max-w-4xl flex-col gap-3 px-6 py-4 sm:px-10">
           <div className="flex items-center justify-between">
-            <div className="flex flex-col">
-              <span className="text-lg font-semibold text-black dark:text-zinc-50">{staff?.warehouse.name}</span>
-              <span className="text-xs text-zinc-500 dark:text-zinc-400">{staff?.warehouse.location}</span>
+            <div className="flex items-center gap-3">
+              <Image src="/logo.png" alt="CapacityBooking" width={159} height={40} className="h-8 w-auto" priority />
+              <div className="flex flex-col">
+                <span className="text-lg font-semibold text-black dark:text-zinc-50">{staff?.warehouse.name}</span>
+                <span className="text-xs text-zinc-500 dark:text-zinc-400">{staff?.warehouse.location}</span>
+              </div>
             </div>
             <div className="flex items-center gap-4">
               <span className="text-sm text-zinc-600 dark:text-zinc-400">{staff?.name}</span>

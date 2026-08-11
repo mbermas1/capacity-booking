@@ -1,3 +1,4 @@
+import Image from "next/image";
 import Link from "next/link";
 import { cookies } from "next/headers";
 import { redirect } from "next/navigation";
@@ -23,8 +24,9 @@ export default async function PortalDashboardLayout({ children }: { children: Re
       <header className="border-b border-black/[.08] bg-white dark:border-white/[.145] dark:bg-[#0a0a0a]">
         <div className="mx-auto flex w-full max-w-4xl items-center justify-between px-6 py-4 sm:px-10">
           <div className="flex items-center gap-6">
-            <Link href="/portal" className="text-lg font-semibold text-black dark:text-zinc-50">
-              {portalTitle}
+            <Link href="/portal" className="flex items-center gap-3">
+              <Image src="/logo.png" alt="CapacityBooking" width={159} height={40} className="h-8 w-auto" priority />
+              <span className="text-lg font-semibold text-black dark:text-zinc-50">{portalTitle}</span>
             </Link>
             <Link
               href="/portal/book"
