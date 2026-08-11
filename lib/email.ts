@@ -33,6 +33,14 @@ async function sendEmail(to: string, subject: string, html: string): Promise<boo
   }
 }
 
+export async function sendPasswordResetEmail(to: string, resetUrl: string): Promise<boolean> {
+  return sendEmail(
+    to,
+    "Reset your password",
+    `<p>Reset your password:</p><p><a href="${resetUrl}">${resetUrl}</a></p><p>This link expires in 30 minutes. If you didn't request this, ignore this email.</p>`,
+  );
+}
+
 export async function sendVerificationEmail(
   to: string,
   verifyUrl: string,

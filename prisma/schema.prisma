@@ -68,15 +68,17 @@ model Carrier {
 }
 
 model CarrierUser {
-  id           String          @id @default(cuid())
-  carrier      Carrier         @relation(fields: [carrierId], references: [id], onDelete: Cascade)
-  carrierId    String
-  name         String
-  email        String          @unique
-  passwordHash String
-  role         CarrierUserRole @default(MEMBER)
-  createdAt    DateTime        @default(now())
-  updatedAt    DateTime        @updatedAt
+  id                     String          @id @default(cuid())
+  carrier                Carrier         @relation(fields: [carrierId], references: [id], onDelete: Cascade)
+  carrierId              String
+  name                   String
+  email                  String          @unique
+  passwordHash           String
+  role                   CarrierUserRole @default(MEMBER)
+  passwordResetToken     String?         @unique
+  passwordResetExpiresAt DateTime?
+  createdAt              DateTime        @default(now())
+  updatedAt              DateTime        @updatedAt
 
   createdBookings   Booking[]            @relation("BookingCreatedByCarrierUser")
   cancelledBookings CancellationRecord[] @relation("CancellationCancelledByCarrierUser")
@@ -128,16 +130,18 @@ model ScoreAppeal {
 }
 
 model Staff {
-  id              String           @id @default(cuid())
-  name            String
-  email           String           @unique
-  passwordHash    String
-  role            StaffRole        @default(ADMIN) // migration backfill default: existing accounts keep full access
-  warehouse       Warehouse        @relation(fields: [warehouseId], references: [id])
-  warehouseId     String // home location; sole scope for DOCK_STAFF, base of the assigned set for FACILITY_MANAGER
-  warehouseAccess StaffWarehouse[] // additional locations, FACILITY_MANAGER only
-  createdAt       DateTime         @default(now())
-  updatedAt       DateTime         @updatedAt
+  id                     String           @id @default(cuid())
+  name                   String
+  email                  String           @unique
+  passwordHash           String
+  role                   StaffRole        @default(ADMIN) // migration backfill default: existing accounts keep full access
+  warehouse              Warehouse        @relation(fields: [warehouseId], references: [id])
+  warehouseId            String // home location; sole scope for DOCK_STAFF, base of the assigned set for FACILITY_MANAGER
+  warehouseAccess        StaffWarehouse[] // additional locations, FACILITY_MANAGER only
+  passwordResetToken     String?          @unique
+  passwordResetExpiresAt DateTime?
+  createdAt              DateTime         @default(now())
+  updatedAt              DateTime         @updatedAt
 
   createdBookings   Booking[]            @relation("BookingCreatedByStaff")
   checkedInBookings Booking[]            @relation("BookingCheckedInByStaff")

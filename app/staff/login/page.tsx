@@ -1,3 +1,4 @@
+import Link from "next/link";
 import { redirect } from "next/navigation";
 import { authenticateStaff, createStaffSession } from "@/lib/staff-session";
 import { landingPathForRole } from "@/lib/staff-roles";
@@ -71,6 +72,13 @@ export default async function StaffLoginPage({
             Log in
           </button>
         </form>
+
+        <Link
+          href="/staff/forgot-password"
+          className="mt-4 block text-sm text-zinc-500 hover:underline dark:text-zinc-400"
+        >
+          Forgot password?
+        </Link>
       </main>
     </div>
   );

@@ -1,3 +1,4 @@
+import Link from "next/link";
 import { redirect } from "next/navigation";
 import { authenticateCarrierUser, createPortalSession } from "@/lib/portal-session";
 
@@ -70,6 +71,13 @@ export default async function PortalLoginPage({
             Log in
           </button>
         </form>
+
+        <Link
+          href="/portal/forgot-password"
+          className="mt-4 block text-sm text-zinc-500 hover:underline dark:text-zinc-400"
+        >
+          Forgot password?
+        </Link>
       </main>
     </div>
   );
