@@ -25,6 +25,38 @@ body {
   font-family: var(--font-sans);
 }
 
+/* Collapsible sidebar (app/staff/(dashboard)/sidebar-shell.tsx) */
+aside.sidebar {
+  width: 16rem;
+  transition: width 150ms ease;
+}
+aside.sidebar[data-collapsed="true"] {
+  width: 4rem;
+}
+aside.sidebar[data-collapsed="true"] .sidebar-label {
+  display: none;
+}
+aside.sidebar[data-collapsed="true"] .nav-link {
+  justify-content: center;
+  padding-left: 0;
+  padding-right: 0;
+}
+
+/* Modal popovers (Accounts/Warehouses "Add" buttons) */
+[popover] {
+  position: fixed;
+  inset: 0;
+  margin: auto; /* Tailwind's preflight zeroes margin, which breaks the UA stylesheet's centering */
+  border: none;
+  padding: 0;
+  background: transparent;
+  overflow: visible;
+  max-height: calc(100vh - 4rem);
+}
+[popover]::backdrop {
+  background: rgb(0 0 0 / 0.4);
+}
+
 @media print {
   .no-print {
     display: none !important;

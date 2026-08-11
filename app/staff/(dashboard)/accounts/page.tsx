@@ -1,9 +1,11 @@
 import { redirect } from "next/navigation";
 import { revalidatePath } from "next/cache";
+import { ChevronDown, Landmark } from "lucide-react";
 import { prisma } from "@/lib/prisma";
 import { hashPassword } from "@/lib/portal-auth";
 import { getStaffMember } from "@/lib/staff-session";
 import { canAssignWarehouseManager, canCreateAccount } from "@/lib/staff-roles";
+import { SortableHeader } from "@/components/sortable-header";
 import { Prisma } from "@/app/generated/prisma/client";
 
 async function createAccount(formData: FormData) {
@@ -18,6 +20,7 @@ async function createAccount(formData: FormData) {
   await prisma.account.create({ data: { name } });
 
   revalidatePath("/staff/accounts");
+  redirect("/staff/accounts?message=" + encodeURIComponent("Account created."));
 }
 
 async function assignWarehouseManager(accountId: string, formData: FormData) {
@@ -143,10 +146,12 @@ async function removeWarehouseManager(accountId: string, staffId: string) {
   redirect("/staff/accounts?message=" + encodeURIComponent("Warehouse Manager removed."));
 }
 
+const GRID_COLS = "grid-cols-[2fr_1fr_1fr_2fr_1.5rem]";
+
 export default async function StaffAccountsPage({
   searchParams,
 }: {
-  searchParams: Promise<{ message?: string; error?: string }>;
+  searchParams: Promise<{ message?: string; error?: string; q?: string; sort?: string; dir?: string }>;
 }) {
   const staff = await getStaffMember();
   if (!staff) return null;
@@ -154,9 +159,11 @@ export default async function StaffAccountsPage({
     return <p className="text-sm text-zinc-600 dark:text-zinc-400">You don&apos;t have access to this page.</p>;
   }
 
-  const { message, error } = await searchParams;
+  const params = await searchParams;
+  const { message, error, q } = params;
 
   const accounts = await prisma.account.findMany({
+    where: q ? { name: { contains: q } } : undefined,
     orderBy: { name: "asc" },
     include: {
       warehouses: { orderBy: { name: "asc" } },
@@ -169,8 +176,20 @@ export default async function StaffAccountsPage({
     },
   });
 
+  const sorted = [...accounts].sort((a, b) => {
+    const dir = params.dir === "desc" ? -1 : 1;
+    switch (params.sort) {
+      case "warehouses":
+        return (a._count.warehouses - b._count.warehouses) * dir;
+      case "staff":
+        return (a._count.staff - b._count.staff) * dir;
+      default:
+        return a.name.localeCompare(b.name) * dir;
+    }
+  });
+
   return (
-    <div className="flex flex-col gap-8">
+    <div className="flex flex-col gap-6">
       {message && (
         <p className="rounded-lg bg-green-100 px-3 py-2 text-sm text-green-800 dark:bg-green-950 dark:text-green-300">
           {message}
@@ -182,12 +201,34 @@ export default async function StaffAccountsPage({
         </p>
       )}
 
-      <section>
-        <h1 className="mb-4 text-xl font-semibold text-black dark:text-zinc-50">Add an Account</h1>
-        <form
-          action={createAccount}
-          className="flex flex-col gap-4 rounded-2xl border border-black/[.08] bg-white p-5 dark:border-white/[.145] dark:bg-[#0a0a0a] sm:flex-row sm:flex-wrap sm:items-end"
+      <div className="flex flex-wrap items-start justify-between gap-4">
+        <div>
+          <h1 className="text-2xl font-semibold text-black dark:text-zinc-50">Accounts</h1>
+          <p className="text-sm text-zinc-500 dark:text-zinc-400">Manage tenant accounts and their Warehouse Managers</p>
+        </div>
+        <button
+          popoverTarget="add-account-popover"
+          className="h-10 rounded-full bg-foreground px-4 text-sm font-medium text-background transition-colors hover:bg-[#383838] dark:hover:bg-[#ccc]"
         >
+          + Add Account
+        </button>
+      </div>
+
+      <div
+        id="add-account-popover"
+        popover="auto"
+        className="w-full max-w-md rounded-2xl border border-black/[.08] bg-white shadow-xl dark:border-white/[.145] dark:bg-[#0a0a0a]"
+      >
+        <div className="flex items-start gap-3 border-b border-black/[.06] p-5 dark:border-white/[.08]">
+          <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg bg-blue-100 text-blue-700 dark:bg-blue-950 dark:text-blue-300">
+            <Landmark className="h-4.5 w-4.5" />
+          </div>
+          <div>
+            <h2 className="text-base font-semibold text-black dark:text-zinc-50">Add Account</h2>
+            <p className="text-xs text-zinc-500 dark:text-zinc-400">Create a new tenant account</p>
+          </div>
+        </div>
+        <form action={createAccount} className="flex flex-col gap-4 p-5">
           <div className="flex flex-col gap-1">
             <label htmlFor="name" className="text-sm font-medium text-zinc-700 dark:text-zinc-300">
               Account Name
@@ -200,38 +241,74 @@ export default async function StaffAccountsPage({
               className="h-10 rounded-lg border border-black/[.08] bg-white px-3 text-sm text-black dark:border-white/[.145] dark:bg-black dark:text-zinc-50"
             />
           </div>
-          <button
-            type="submit"
-            className="h-10 rounded-full bg-foreground px-4 text-sm font-medium text-background transition-colors hover:bg-[#383838] dark:hover:bg-[#ccc]"
-          >
-            Add Account
-          </button>
+          <div className="flex justify-end gap-2 border-t border-black/[.06] pt-4 dark:border-white/[.08]">
+            <button
+              type="button"
+              popoverTarget="add-account-popover"
+              popoverTargetAction="hide"
+              className="h-10 rounded-full border border-black/[.08] px-4 text-sm font-medium transition-colors hover:bg-black/[.04] dark:border-white/[.145] dark:hover:bg-[#1a1a1a]"
+            >
+              Cancel
+            </button>
+            <button
+              type="submit"
+              className="h-10 rounded-full bg-foreground px-4 text-sm font-medium text-background transition-colors hover:bg-[#383838] dark:hover:bg-[#ccc]"
+            >
+              Add Account
+            </button>
+          </div>
         </form>
-      </section>
+      </div>
 
-      <section>
-        <h2 className="mb-3 text-lg font-medium text-black dark:text-zinc-50">Accounts</h2>
-        {accounts.length === 0 ? (
-          <p className="text-sm text-zinc-500 dark:text-zinc-500">No accounts yet.</p>
+      <form method="get" className="flex items-center gap-2">
+        <input
+          type="search"
+          name="q"
+          defaultValue={q}
+          placeholder="Search by account name..."
+          className="h-10 w-full max-w-sm rounded-lg border border-black/[.08] bg-white px-3 text-sm text-black dark:border-white/[.145] dark:bg-black dark:text-zinc-50"
+        />
+        <button
+          type="submit"
+          className="h-10 rounded-lg border border-black/[.08] px-4 text-sm font-medium transition-colors hover:bg-black/[.04] dark:border-white/[.145] dark:hover:bg-[#1a1a1a]"
+        >
+          Search
+        </button>
+      </form>
+
+      <div className="overflow-hidden rounded-2xl border border-black/[.08] bg-white dark:border-white/[.145] dark:bg-[#0a0a0a]">
+        <div
+          className={`grid ${GRID_COLS} gap-4 border-b border-black/[.06] px-4 py-2 text-xs font-medium text-zinc-500 dark:border-white/[.08] dark:text-zinc-400`}
+        >
+          <SortableHeader label="Name" sortKey="name" basePath="/staff/accounts" searchParams={params} />
+          <SortableHeader label="Warehouses" sortKey="warehouses" basePath="/staff/accounts" searchParams={params} />
+          <SortableHeader label="Staff" sortKey="staff" basePath="/staff/accounts" searchParams={params} />
+          <span>Warehouse Managers</span>
+          <span />
+        </div>
+
+        {sorted.length === 0 ? (
+          <p className="p-4 text-sm text-zinc-500 dark:text-zinc-500">No accounts found.</p>
         ) : (
-          <ul className="flex flex-col gap-4">
-            {accounts.map((a) => {
-              const boundAssign = assignWarehouseManager.bind(null, a.id);
-              return (
-                <li
-                  key={a.id}
-                  className="flex flex-col gap-3 rounded-2xl border border-black/[.08] bg-white p-4 dark:border-white/[.145] dark:bg-[#0a0a0a]"
+          sorted.map((a) => {
+            const boundAssign = assignWarehouseManager.bind(null, a.id);
+            return (
+              <details key={a.id} className="group border-b border-black/[.06] last:border-b-0 dark:border-white/[.08]">
+                <summary
+                  className={`grid ${GRID_COLS} cursor-pointer list-none items-center gap-4 px-4 py-3 text-sm hover:bg-black/[.02] dark:hover:bg-white/[.03]`}
                 >
-                  <div className="flex flex-col gap-0.5">
-                    <span className="text-sm font-medium text-black dark:text-zinc-50">{a.name}</span>
-                    <span className="text-xs text-zinc-500 dark:text-zinc-400">
-                      {a._count.warehouses} warehouse{a._count.warehouses === 1 ? "" : "s"} · {a._count.staff} staff
-                    </span>
-                  </div>
+                  <span className="font-medium text-black dark:text-zinc-50">{a.name}</span>
+                  <span className="text-zinc-600 dark:text-zinc-400">{a._count.warehouses}</span>
+                  <span className="text-zinc-600 dark:text-zinc-400">{a._count.staff}</span>
+                  <span className="truncate text-zinc-600 dark:text-zinc-400">
+                    {a.staff.length > 0 ? a.staff.map((s) => s.name).join(", ") : "—"}
+                  </span>
+                  <ChevronDown className="h-4 w-4 text-zinc-400 transition-transform group-open:rotate-180" />
+                </summary>
 
+                <div className="flex flex-col gap-3 border-t border-black/[.06] bg-zinc-50 p-4 dark:border-white/[.08] dark:bg-white/[.02]">
                   {a.staff.length > 0 && (
                     <div className="flex flex-col gap-2">
-                      <span className="text-xs font-medium text-zinc-600 dark:text-zinc-400">Warehouse Managers</span>
                       {a.staff.map((s) => {
                         const boundUpdate = updateWarehouseManager.bind(null, a.id, s.id);
                         const boundRemove = removeWarehouseManager.bind(null, a.id, s.id);
@@ -239,7 +316,7 @@ export default async function StaffAccountsPage({
                         return (
                           <div
                             key={s.id}
-                            className="flex flex-col gap-2 rounded-xl border border-black/[.06] p-3 dark:border-white/[.08]"
+                            className="flex flex-col gap-2 rounded-xl border border-black/[.06] bg-white p-3 dark:border-white/[.08] dark:bg-[#0a0a0a]"
                           >
                             <div className="flex flex-wrap items-center justify-between gap-2">
                               <span className="text-xs text-zinc-600 dark:text-zinc-400">
@@ -399,12 +476,12 @@ export default async function StaffAccountsPage({
                       </button>
                     </form>
                   )}
-                </li>
-              );
-            })}
-          </ul>
+                </div>
+              </details>
+            );
+          })
         )}
-      </section>
+      </div>
     </div>
   );
 }
