@@ -1,7 +1,7 @@
 import Link from "next/link";
 import { revalidatePath } from "next/cache";
 import { prisma } from "@/lib/prisma";
-import { getPortalCarrier } from "@/lib/portal-session";
+import { getPortalUser } from "@/lib/portal-session";
 import { notifyBookingCancelled, detectNoShowMany, cancelBooking as cancelBookingRecord } from "@/lib/bookings";
 import { computeCarrierScore, computeCarrierScoreTrend, type CarrierScore } from "@/lib/carrier-score";
 import { STATUS_STYLES, LOAD_TYPE_STYLES, formatTime } from "@/lib/booking-display";
@@ -49,13 +49,15 @@ function ComponentTrendRow({
 async function submitAppeal(formData: FormData) {
   "use server";
 
-  const carrier = await getPortalCarrier();
-  if (!carrier) return;
+  const user = await getPortalUser();
+  if (!user) return;
 
   const note = String(formData.get("note") ?? "").trim();
   if (!note) return;
 
-  await prisma.scoreAppeal.create({ data: { carrierId: carrier.id, note } });
+  await prisma.scoreAppeal.create({
+    data: { carrierId: user.carrier.id, note, createdByCarrierUserId: user.id },
+  });
 
   revalidatePath("/portal");
 }
@@ -63,14 +65,14 @@ async function submitAppeal(formData: FormData) {
 async function cancelBooking(formData: FormData) {
   "use server";
 
-  const carrier = await getPortalCarrier();
-  if (!carrier) return;
+  const user = await getPortalUser();
+  if (!user) return;
 
   const bookingId = String(formData.get("bookingId") ?? "");
   const booking = await prisma.booking.findUnique({ where: { id: bookingId } });
-  if (!booking || booking.carrierId !== carrier.id) return;
+  if (!booking || booking.carrierId !== user.carrier.id) return;
 
-  const deleted = await cancelBookingRecord(bookingId);
+  const deleted = await cancelBookingRecord(bookingId, { carrierUserId: user.id });
 
   await notifyBookingCancelled(deleted);
 
@@ -87,13 +89,18 @@ function formatDate(date: Date): string {
 }
 
 export default async function PortalDashboardPage() {
-  const carrier = await getPortalCarrier();
-  if (!carrier) return null;
+  const user = await getPortalUser();
+  if (!user) return null;
+  const carrier = user.carrier;
 
   const [rawBookings, score, scoreTrend] = await Promise.all([
     prisma.booking.findMany({
       where: { carrierId: carrier.id },
-      include: { dock: true },
+      include: {
+        dock: true,
+        createdByStaff: { select: { name: true } },
+        createdByCarrierUser: { select: { name: true } },
+      },
       orderBy: { startTime: "desc" },
     }),
     computeCarrierScore(carrier.id),
@@ -195,6 +202,11 @@ export default async function PortalDashboardPage() {
                     {formatDate(booking.startTime)} · {formatTime(booking.startTime)}–{formatTime(booking.endTime)}
                   </span>
                   <span className="text-xs text-zinc-500 dark:text-zinc-400">{booking.referenceNumber}</span>
+                  {(booking.createdByStaff || booking.createdByCarrierUser) && (
+                    <span className="text-xs text-zinc-500 dark:text-zinc-400">
+                      booked by {(booking.createdByCarrierUser ?? booking.createdByStaff)!.name}
+                    </span>
+                  )}
                 </div>
                 <div className="flex items-center gap-2">
                   <span className={`rounded-full px-2 py-0.5 text-xs font-medium ${LOAD_TYPE_STYLES[booking.loadType]}`}>

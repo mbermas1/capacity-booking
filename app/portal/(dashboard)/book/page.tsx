@@ -1,7 +1,7 @@
 import { redirect } from "next/navigation";
 import { prisma } from "@/lib/prisma";
 import { getDockAvailability } from "@/lib/availability";
-import { getPortalCarrier } from "@/lib/portal-session";
+import { getPortalUser } from "@/lib/portal-session";
 import {
   BookingOverlapError,
   DockClosedError,
@@ -27,8 +27,9 @@ function parseUtc(datetimeLocalValue: string): Date | null {
 async function bookSlot(formData: FormData) {
   "use server";
 
-  const carrier = await getPortalCarrier();
-  if (!carrier) redirect("/portal/login");
+  const user = await getPortalUser();
+  if (!user) redirect("/portal/login");
+  const carrier = user.carrier;
 
   const dockId = String(formData.get("dockId") ?? "");
   const startTimeRaw = String(formData.get("startTime") ?? "");
@@ -64,17 +65,20 @@ async function bookSlot(formData: FormData) {
       throw new LeadTimeError(dock.minLeadTimeMinutes as number);
     }
 
-    const booking = await createBooking({
-      dockId,
-      startTime,
-      endTime,
-      carrierId: carrier.id,
-      referenceNumber,
-      loadType: loadType as LoadType,
-      priority,
-      shipmentVolume,
-      commodityTagIds: commodityTagId ? [commodityTagId] : undefined,
-    });
+    const booking = await createBooking(
+      {
+        dockId,
+        startTime,
+        endTime,
+        carrierId: carrier.id,
+        referenceNumber,
+        loadType: loadType as LoadType,
+        priority,
+        shipmentVolume,
+        commodityTagIds: commodityTagId ? [commodityTagId] : undefined,
+      },
+      { carrierUserId: user.id },
+    );
 
     await notifyBookingConfirmed(booking.id);
   } catch (error) {

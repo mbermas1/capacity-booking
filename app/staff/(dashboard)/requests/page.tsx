@@ -51,14 +51,17 @@ async function approveRequest(requestId: string) {
       email: bookingRequest.contactEmail,
     });
 
-    await createBooking({
-      dockId: bookingRequest.dockId,
-      startTime: bookingRequest.startTime,
-      endTime: bookingRequest.endTime,
-      carrierId: carrier.id,
-      referenceNumber: bookingRequest.referenceNumber,
-      loadType: bookingRequest.loadType,
-    });
+    await createBooking(
+      {
+        dockId: bookingRequest.dockId,
+        startTime: bookingRequest.startTime,
+        endTime: bookingRequest.endTime,
+        carrierId: carrier.id,
+        referenceNumber: bookingRequest.referenceNumber,
+        loadType: bookingRequest.loadType,
+      },
+      { staffId: staff.id },
+    );
 
     await prisma.bookingRequest.update({
       where: { id: requestId },

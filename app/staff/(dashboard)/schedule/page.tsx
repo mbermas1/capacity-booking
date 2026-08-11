@@ -20,7 +20,7 @@ async function checkIn(formData: FormData) {
   const bookingId = String(formData.get("bookingId") ?? "");
   if (!(await assertBookingAccess(staff, bookingId))) return;
   try {
-    await checkInBooking(bookingId);
+    await checkInBooking(bookingId, { staffId: staff.id });
   } catch {
     // booking already moved on (e.g. concurrent edit) — ignore, the re-render shows current state
   }
@@ -37,7 +37,7 @@ async function complete(formData: FormData) {
   const bookingId = String(formData.get("bookingId") ?? "");
   if (!(await assertBookingAccess(staff, bookingId))) return;
   try {
-    await completeBooking(bookingId);
+    await completeBooking(bookingId, { staffId: staff.id });
   } catch {
     // booking already moved on — ignore, the re-render shows current state
   }
@@ -93,6 +93,10 @@ export default async function StaffSchedulePage({
         include: {
           carrier: { select: { name: true } },
           tags: { include: { tag: true } },
+          createdByStaff: { select: { name: true } },
+          createdByCarrierUser: { select: { name: true } },
+          checkedInByStaff: { select: { name: true } },
+          completedByStaff: { select: { name: true } },
         },
         orderBy: { startTime: "asc" },
       },
@@ -182,6 +186,11 @@ export default async function StaffSchedulePage({
                             </span>
                             <span className="text-sm text-black dark:text-zinc-50">{booking.carrier.name}</span>
                             <span className="text-xs text-zinc-500 dark:text-zinc-400">{booking.referenceNumber}</span>
+                            {(booking.createdByStaff || booking.createdByCarrierUser) && (
+                              <span className="text-xs text-zinc-500 dark:text-zinc-400">
+                                booked by {(booking.createdByStaff ?? booking.createdByCarrierUser)!.name}
+                              </span>
+                            )}
                             {commodityTag && (
                               <span className="text-xs text-zinc-500 dark:text-zinc-400">{commodityTag.name}</span>
                             )}
@@ -223,6 +232,7 @@ export default async function StaffSchedulePage({
                             {booking.status === "CHECKED_IN" && booking.checkedInAt && (
                               <span className="font-mono text-xs text-zinc-500 dark:text-zinc-400">
                                 arrived {formatTime(booking.checkedInAt)}
+                                {booking.checkedInByStaff && ` by ${booking.checkedInByStaff.name}`}
                               </span>
                             )}
                             {booking.status === "CHECKED_IN" && (
@@ -241,6 +251,7 @@ export default async function StaffSchedulePage({
                                 done {formatTime(booking.completedAt)}
                                 {booking.checkedInAt &&
                                   ` (${Math.round((booking.completedAt.getTime() - booking.checkedInAt.getTime()) / 60000)} min)`}
+                                {booking.completedByStaff && ` by ${booking.completedByStaff.name}`}
                               </span>
                             )}
                           </div>

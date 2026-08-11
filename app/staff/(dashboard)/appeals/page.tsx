@@ -27,7 +27,7 @@ async function resolveAppeal(appealId: string, formData: FormData) {
 
   await prisma.scoreAppeal.update({
     where: { id: appealId },
-    data: { resolvedAt: new Date(), resolutionNote: resolutionNote || undefined },
+    data: { resolvedAt: new Date(), resolutionNote: resolutionNote || undefined, resolvedByStaffId: staff.id },
   });
 
   redirect("/staff/appeals");
@@ -41,7 +41,11 @@ export default async function StaffAppealsPage() {
   }
 
   const appeals = await prisma.scoreAppeal.findMany({
-    include: { carrier: { select: { name: true } } },
+    include: {
+      carrier: { select: { name: true } },
+      createdByCarrierUser: { select: { name: true } },
+      resolvedByStaff: { select: { name: true } },
+    },
     orderBy: { createdAt: "desc" },
   });
 
@@ -67,6 +71,7 @@ export default async function StaffAppealsPage() {
                     <span className="text-sm font-medium text-black dark:text-zinc-50">{appeal.carrier.name}</span>
                     <span className="font-mono text-xs text-zinc-500 dark:text-zinc-400">
                       {formatDateTime(appeal.createdAt)} UTC
+                      {appeal.createdByCarrierUser && ` · submitted by ${appeal.createdByCarrierUser.name}`}
                     </span>
                     <span className="text-sm text-zinc-700 dark:text-zinc-300">{appeal.note}</span>
                   </div>
@@ -106,6 +111,11 @@ export default async function StaffAppealsPage() {
                 <span className="text-xs text-zinc-500 dark:text-zinc-400">{appeal.note}</span>
                 {appeal.resolutionNote && (
                   <span className="text-xs text-zinc-600 dark:text-zinc-300">Resolution: {appeal.resolutionNote}</span>
+                )}
+                {appeal.resolvedByStaff && (
+                  <span className="text-xs text-zinc-500 dark:text-zinc-400">
+                    Resolved by {appeal.resolvedByStaff.name}
+                  </span>
                 )}
               </li>
             ))}

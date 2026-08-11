@@ -112,6 +112,9 @@ export type CreateBookingInput = {
   commodityTagIds?: string[];
 };
 
+/** Who performed a booking-lifecycle action — omitted for system/API callers with no session. */
+export type BookingActor = { staffId: string } | { carrierUserId: string };
+
 type ValidateSlotParams = {
   dockId: string;
   startTime: Date;
@@ -219,7 +222,7 @@ async function validateBookingSlot(tx: Prisma.TransactionClient, params: Validat
   return { dock, declaredTags };
 }
 
-async function runCreateBooking(tx: Prisma.TransactionClient, input: CreateBookingInput) {
+async function runCreateBooking(tx: Prisma.TransactionClient, input: CreateBookingInput, actor?: BookingActor) {
   const { dockId, startTime, endTime, carrierId, commodityTagIds = [] } = input;
   const effectivePriority = input.priority ?? BookingPriority.STANDARD;
 
@@ -244,13 +247,15 @@ async function runCreateBooking(tx: Prisma.TransactionClient, input: CreateBooki
       priority: input.priority,
       shipmentVolume: input.shipmentVolume,
       tags: declaredTags.length > 0 ? { create: declaredTags.map((t) => ({ tagId: t.id })) } : undefined,
+      createdByStaffId: actor && "staffId" in actor ? actor.staffId : undefined,
+      createdByCarrierUserId: actor && "carrierUserId" in actor ? actor.carrierUserId : undefined,
     },
     include: CARRIER_NAME_INCLUDE,
   });
 }
 
-export async function createBooking(input: CreateBookingInput) {
-  return prisma.$transaction((tx) => runCreateBooking(tx, input));
+export async function createBooking(input: CreateBookingInput, actor?: BookingActor) {
+  return prisma.$transaction((tx) => runCreateBooking(tx, input, actor));
 }
 
 /**
@@ -258,8 +263,8 @@ export async function createBooking(input: CreateBookingInput) {
  * caller already opened — used by bulk import, which needs one transaction
  * spanning the whole batch rather than one per booking.
  */
-export async function createBookingWithTx(tx: Prisma.TransactionClient, input: CreateBookingInput) {
-  return runCreateBooking(tx, input);
+export async function createBookingWithTx(tx: Prisma.TransactionClient, input: CreateBookingInput, actor?: BookingActor) {
+  return runCreateBooking(tx, input, actor);
 }
 
 export type RescheduleBookingInput = { startTime: Date; endTime: Date };
@@ -311,7 +316,7 @@ export async function rescheduleBooking(bookingId: string, input: RescheduleBook
  * No notification: unlike confirm/cancel/reschedule/no-show, the carrier's
  * own driver is physically present for this event.
  */
-export async function checkInBooking(bookingId: string) {
+export async function checkInBooking(bookingId: string, actor?: { staffId: string }) {
   return prisma.$transaction(async (tx) => {
     const existing = await tx.booking.findUnique({ where: { id: bookingId } });
     if (!existing) {
@@ -325,7 +330,7 @@ export async function checkInBooking(bookingId: string) {
 
     return tx.booking.update({
       where: { id: bookingId },
-      data: { status: "CHECKED_IN", checkedInAt: new Date() },
+      data: { status: "CHECKED_IN", checkedInAt: new Date(), checkedInByStaffId: actor?.staffId },
       include: CARRIER_NAME_INCLUDE,
     });
   });
@@ -337,7 +342,7 @@ export async function checkInBooking(bookingId: string) {
  * "done" without having arrived, which also gives completedAt - checkedInAt
  * a real dwell-time window for later use.
  */
-export async function completeBooking(bookingId: string) {
+export async function completeBooking(bookingId: string, actor?: { staffId: string }) {
   return prisma.$transaction(async (tx) => {
     const existing = await tx.booking.findUnique({ where: { id: bookingId } });
     if (!existing) {
@@ -351,7 +356,7 @@ export async function completeBooking(bookingId: string) {
 
     return tx.booking.update({
       where: { id: bookingId },
-      data: { status: "COMPLETED", completedAt: new Date() },
+      data: { status: "COMPLETED", completedAt: new Date(), completedByStaffId: actor?.staffId },
       include: CARRIER_NAME_INCLUDE,
     });
   });
@@ -365,7 +370,7 @@ export async function completeBooking(bookingId: string) {
  * portal API, portal UI) route through this instead of calling
  * prisma.booking.delete() directly.
  */
-export async function cancelBooking(bookingId: string) {
+export async function cancelBooking(bookingId: string, actor?: BookingActor) {
   return prisma.$transaction(async (tx) => {
     const deleted = await tx.booking.delete({
       where: { id: bookingId },
@@ -379,6 +384,8 @@ export async function cancelBooking(bookingId: string) {
         originalStartTime: deleted.startTime,
         originalEndTime: deleted.endTime,
         referenceNumber: deleted.referenceNumber,
+        cancelledByStaffId: actor && "staffId" in actor ? actor.staffId : undefined,
+        cancelledByCarrierUserId: actor && "carrierUserId" in actor ? actor.carrierUserId : undefined,
       },
     });
 

@@ -78,6 +78,10 @@ model CarrierUser {
   createdAt    DateTime        @default(now())
   updatedAt    DateTime        @updatedAt
 
+  createdBookings   Booking[]            @relation("BookingCreatedByCarrierUser")
+  cancelledBookings CancellationRecord[] @relation("CancellationCancelledByCarrierUser")
+  createdAppeals    ScoreAppeal[]        @relation("AppealCreatedByCarrierUser")
+
   @@index([carrierId])
 }
 
@@ -97,6 +101,11 @@ model CancellationRecord {
   referenceNumber   String
   cancelledAt       DateTime @default(now())
 
+  cancelledByStaffId       String?
+  cancelledByStaff         Staff?       @relation("CancellationCancelledByStaff", fields: [cancelledByStaffId], references: [id], onDelete: SetNull)
+  cancelledByCarrierUserId String?
+  cancelledByCarrierUser   CarrierUser? @relation("CancellationCancelledByCarrierUser", fields: [cancelledByCarrierUserId], references: [id], onDelete: SetNull)
+
   @@index([carrierId])
 }
 
@@ -108,6 +117,11 @@ model ScoreAppeal {
   createdAt      DateTime  @default(now())
   resolvedAt     DateTime?
   resolutionNote String?
+
+  createdByCarrierUserId String?
+  createdByCarrierUser   CarrierUser? @relation("AppealCreatedByCarrierUser", fields: [createdByCarrierUserId], references: [id], onDelete: SetNull)
+  resolvedByStaffId      String?
+  resolvedByStaff        Staff?       @relation("AppealResolvedByStaff", fields: [resolvedByStaffId], references: [id], onDelete: SetNull)
 
   @@index([carrierId])
   @@index([resolvedAt])
@@ -124,6 +138,12 @@ model Staff {
   warehouseAccess StaffWarehouse[] // additional locations, FACILITY_MANAGER only
   createdAt       DateTime         @default(now())
   updatedAt       DateTime         @updatedAt
+
+  createdBookings   Booking[]            @relation("BookingCreatedByStaff")
+  checkedInBookings Booking[]            @relation("BookingCheckedInByStaff")
+  completedBookings Booking[]            @relation("BookingCompletedByStaff")
+  cancelledBookings CancellationRecord[] @relation("CancellationCancelledByStaff")
+  resolvedAppeals   ScoreAppeal[]        @relation("AppealResolvedByStaff")
 
   @@index([warehouseId])
 }
@@ -163,6 +183,15 @@ model Booking {
   completedAt     DateTime?
   createdAt       DateTime        @default(now())
   updatedAt       DateTime        @updatedAt
+
+  createdByStaffId       String?
+  createdByStaff          Staff?      @relation("BookingCreatedByStaff", fields: [createdByStaffId], references: [id], onDelete: SetNull)
+  createdByCarrierUserId String?
+  createdByCarrierUser    CarrierUser? @relation("BookingCreatedByCarrierUser", fields: [createdByCarrierUserId], references: [id], onDelete: SetNull)
+  checkedInByStaffId      String?
+  checkedInByStaff         Staff?     @relation("BookingCheckedInByStaff", fields: [checkedInByStaffId], references: [id], onDelete: SetNull)
+  completedByStaffId      String?
+  completedByStaff          Staff?    @relation("BookingCompletedByStaff", fields: [completedByStaffId], references: [id], onDelete: SetNull)
 
   @@index([dockId, startTime, endTime])
   @@index([carrierId, startTime])

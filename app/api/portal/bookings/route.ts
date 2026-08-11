@@ -16,7 +16,7 @@ import {
 import { checkLeadTime } from "@/lib/booking-constraints";
 import { CARRIER_NAME_INCLUDE, withCarrierName } from "@/lib/booking-response";
 import { prisma } from "@/lib/prisma";
-import { getPortalCarrier } from "@/lib/portal-session";
+import { getPortalCarrier, getPortalUser } from "@/lib/portal-session";
 import { LoadType, BookingPriority } from "@/app/generated/prisma/client";
 
 const DEFAULT_LIMIT = 20;
@@ -84,10 +84,11 @@ type CreatePortalBookingBody = {
 };
 
 export async function POST(request: NextRequest) {
-  const carrier = await getPortalCarrier();
-  if (!carrier) {
+  const user = await getPortalUser();
+  if (!user) {
     return NextResponse.json({ error: "Not authenticated" }, { status: 401 });
   }
+  const carrier = user.carrier;
 
   let body: CreatePortalBookingBody;
   try {
@@ -163,17 +164,20 @@ export async function POST(request: NextRequest) {
       throw new LeadTimeError(dock.minLeadTimeMinutes as number);
     }
 
-    const booking = await createBooking({
-      dockId: body.dockId as string,
-      startTime: startTime as Date,
-      endTime: endTime as Date,
-      carrierId: carrier.id,
-      referenceNumber: (body.referenceNumber as string).trim(),
-      loadType: body.loadType as LoadType,
-      priority,
-      shipmentVolume,
-      commodityTagIds,
-    });
+    const booking = await createBooking(
+      {
+        dockId: body.dockId as string,
+        startTime: startTime as Date,
+        endTime: endTime as Date,
+        carrierId: carrier.id,
+        referenceNumber: (body.referenceNumber as string).trim(),
+        loadType: body.loadType as LoadType,
+        priority,
+        shipmentVolume,
+        commodityTagIds,
+      },
+      { carrierUserId: user.id },
+    );
 
     await notifyBookingConfirmed(booking.id);
 
