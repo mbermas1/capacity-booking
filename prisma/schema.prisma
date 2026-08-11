@@ -12,6 +12,17 @@ datasource db {
   provider = "sqlite"
 }
 
+model Account {
+  id         String      @id @default(cuid())
+  name       String
+  warehouses Warehouse[]
+  staff      Staff[]
+  carriers   Carrier[]
+  tags       Tag[]
+  createdAt  DateTime    @default(now())
+  updatedAt  DateTime    @updatedAt
+}
+
 model Warehouse {
   id                   String           @id @default(cuid())
   name                 String
@@ -19,6 +30,8 @@ model Warehouse {
   publicBookingSlug    String           @unique // rotatable handle for the public /book link; regenerable on demand
   detentionRatePerHour Float? // $/hour charged after the free-time grace period; null = cost not configured, not estimated
   detentionFreeMinutes Int? // grace period before detention accrues; null (with a rate set) = no grace period
+  account              Account          @relation(fields: [accountId], references: [id])
+  accountId            String // the tenant that owns this warehouse
   docks                Dock[]
   staff                Staff[]
   staffAccess          StaffWarehouse[]
@@ -27,6 +40,8 @@ model Warehouse {
   bookingRequests      BookingRequest[]
   createdAt            DateTime         @default(now())
   updatedAt            DateTime         @updatedAt
+
+  @@index([accountId])
 }
 
 model Dock {
@@ -54,9 +69,11 @@ model Dock {
 
 model Carrier {
   id                  String               @id @default(cuid())
-  name                String               @unique // display name, preserves original casing
-  nameKey             String               @unique // trim().toLowerCase() of name — the real identity/matching key
-  email               String?              @unique // company notification address (confirm/cancel/reschedule/no-show emails) — not a login
+  account             Account              @relation(fields: [accountId], references: [id])
+  accountId           String // carrier identity is isolated per tenant — the same real company doing business with two Accounts is two separate rows
+  name                String // display name, preserves original casing
+  nameKey             String // trim().toLowerCase() of name — the real identity/matching key, unique within the account
+  email               String? // company notification address (confirm/cancel/reschedule/no-show emails) — not a login
   partnerType         PartnerType          @default(CARRIER)
   users               CarrierUser[]
   tags                CarrierTag[]
@@ -65,6 +82,11 @@ model Carrier {
   scoreAppeals        ScoreAppeal[]
   createdAt           DateTime             @default(now())
   updatedAt           DateTime             @updatedAt
+
+  @@unique([accountId, name])
+  @@unique([accountId, nameKey])
+  @@unique([accountId, email])
+  @@index([accountId])
 }
 
 model CarrierUser {
@@ -134,10 +156,12 @@ model Staff {
   name                   String
   email                  String           @unique
   passwordHash           String
-  role                   StaffRole        @default(ADMIN) // migration backfill default: existing accounts keep full access
-  warehouse              Warehouse        @relation(fields: [warehouseId], references: [id])
-  warehouseId            String // home location; sole scope for DOCK_STAFF, base of the assigned set for FACILITY_MANAGER
-  warehouseAccess        StaffWarehouse[] // additional locations, FACILITY_MANAGER only
+  role                   StaffRole        @default(WAREHOUSE_MANAGER)
+  account                Account?         @relation(fields: [accountId], references: [id])
+  accountId              String? // tenant this staff member belongs to; null only for SUPER_USER, which is unscoped
+  warehouse              Warehouse?       @relation(fields: [warehouseId], references: [id])
+  warehouseId            String? // home location; sole scope for DOCK_STAFF, base of the assigned set for WAREHOUSE_MANAGER/DOCK_MANAGER; null only for SUPER_USER
+  warehouseAccess        StaffWarehouse[] // additional locations, WAREHOUSE_MANAGER/DOCK_MANAGER only
   passwordResetToken     String?          @unique
   passwordResetExpiresAt DateTime?
   createdAt              DateTime         @default(now())
@@ -150,6 +174,7 @@ model Staff {
   resolvedAppeals   ScoreAppeal[]        @relation("AppealResolvedByStaff")
 
   @@index([warehouseId])
+  @@index([accountId])
 }
 
 model StaffWarehouse {
@@ -163,8 +188,9 @@ model StaffWarehouse {
 }
 
 enum StaffRole {
-  ADMIN
-  FACILITY_MANAGER
+  SUPER_USER // unscoped: creates Accounts/Warehouses, assigns WAREHOUSE_MANAGERs
+  WAREHOUSE_MANAGER // formerly ADMIN — full operational access, scoped to one Account's assigned warehouse(s)
+  DOCK_MANAGER // formerly FACILITY_MANAGER — operational access minus appeals/staff/tags, same warehouse scoping
   DOCK_STAFF
   ANALYST
 }
@@ -189,13 +215,13 @@ model Booking {
   updatedAt       DateTime        @updatedAt
 
   createdByStaffId       String?
-  createdByStaff          Staff?      @relation("BookingCreatedByStaff", fields: [createdByStaffId], references: [id], onDelete: SetNull)
+  createdByStaff         Staff?       @relation("BookingCreatedByStaff", fields: [createdByStaffId], references: [id], onDelete: SetNull)
   createdByCarrierUserId String?
-  createdByCarrierUser    CarrierUser? @relation("BookingCreatedByCarrierUser", fields: [createdByCarrierUserId], references: [id], onDelete: SetNull)
-  checkedInByStaffId      String?
-  checkedInByStaff         Staff?     @relation("BookingCheckedInByStaff", fields: [checkedInByStaffId], references: [id], onDelete: SetNull)
-  completedByStaffId      String?
-  completedByStaff          Staff?    @relation("BookingCompletedByStaff", fields: [completedByStaffId], references: [id], onDelete: SetNull)
+  createdByCarrierUser   CarrierUser? @relation("BookingCreatedByCarrierUser", fields: [createdByCarrierUserId], references: [id], onDelete: SetNull)
+  checkedInByStaffId     String?
+  checkedInByStaff       Staff?       @relation("BookingCheckedInByStaff", fields: [checkedInByStaffId], references: [id], onDelete: SetNull)
+  completedByStaffId     String?
+  completedByStaff       Staff?       @relation("BookingCompletedByStaff", fields: [completedByStaffId], references: [id], onDelete: SetNull)
 
   @@index([dockId, startTime, endTime])
   @@index([carrierId, startTime])
@@ -266,6 +292,8 @@ model BookingRequest {
 
 model Tag {
   id                 String       @id @default(cuid())
+  account            Account      @relation(fields: [accountId], references: [id])
+  accountId          String // each tenant defines its own tag vocabulary
   category           TagCategory
   name               String
   minDurationMinutes Int? // only meaningful for COMMODITY-category tags
@@ -275,7 +303,8 @@ model Tag {
   createdAt          DateTime     @default(now())
   updatedAt          DateTime     @updatedAt
 
-  @@unique([category, name])
+  @@unique([accountId, category, name])
+  @@index([accountId])
 }
 
 model DockTag {
