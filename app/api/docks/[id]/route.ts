@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
-import { Prisma } from "@/app/generated/prisma/client";
+import { isDockEquipmentType } from "@/lib/dock-equipment-type";
+import { Prisma, type DockEquipmentType } from "@/app/generated/prisma/client";
 
 type UpdateDockBody = {
   name?: unknown;
@@ -60,7 +61,7 @@ export async function PATCH(
   const data: {
     name?: string;
     location?: string;
-    equipmentType?: string;
+    equipmentType?: DockEquipmentType;
     warehouseId?: string;
     capacity?: number;
     minLeadTimeMinutes?: number | null;
@@ -80,8 +81,8 @@ export async function PATCH(
   }
 
   if (body.equipmentType !== undefined) {
-    if (!isNonEmptyString(body.equipmentType)) errors.push("equipmentType must be a non-empty string");
-    else data.equipmentType = body.equipmentType.trim();
+    if (!isDockEquipmentType(body.equipmentType)) errors.push("equipmentType must be one of STANDARD, GROUND_LEVEL");
+    else data.equipmentType = body.equipmentType;
   }
 
   if (body.warehouseId !== undefined) {

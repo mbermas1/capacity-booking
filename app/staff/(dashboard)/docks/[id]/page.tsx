@@ -6,6 +6,7 @@ import { TagCategory } from "@/app/generated/prisma/client";
 import { getStaffMember } from "@/lib/staff-session";
 import { canAccessWarehouse, canManageCapacityRules } from "@/lib/staff-roles";
 import { computeDockDwellStats, computeDockDwellTrend } from "@/lib/dock-dwell";
+import { DOCK_EQUIPMENT_TYPE_LABELS, isDockEquipmentType } from "@/lib/dock-equipment-type";
 
 async function assertDockAccess(dockId: string): Promise<boolean> {
   const staff = await getStaffMember();
@@ -36,7 +37,7 @@ async function updateDockDetails(dockId: string, formData: FormData) {
 
   const name = String(formData.get("name") ?? "").trim();
   const location = String(formData.get("location") ?? "").trim();
-  const equipmentType = String(formData.get("equipmentType") ?? "").trim();
+  const equipmentType = formData.get("equipmentType");
   const capacityRaw = String(formData.get("capacity") ?? "").trim();
   const capacity = Number.isInteger(Number(capacityRaw)) && Number(capacityRaw) >= 1 ? Number(capacityRaw) : 1;
   const minLeadTimeMinutes = parseOptionalNonNegativeInt(String(formData.get("minLeadTimeMinutes") ?? ""));
@@ -44,7 +45,7 @@ async function updateDockDetails(dockId: string, formData: FormData) {
   const reservedHighPrioritySlots = parseOptionalNonNegativeInt(String(formData.get("reservedHighPrioritySlots") ?? ""));
   const requiresManualReview = formData.get("requiresManualReview") === "on";
 
-  if (!name || !location || !equipmentType) return;
+  if (!name || !location || !isDockEquipmentType(equipmentType)) return;
 
   await prisma.dock.update({
     where: { id: dockId },
@@ -214,14 +215,19 @@ export default async function StaffDockDetailPage({ params }: { params: Promise<
             <label htmlFor="equipmentType" className="text-sm font-medium text-zinc-700 dark:text-zinc-300">
               Equipment Type
             </label>
-            <input
+            <select
               id="equipmentType"
               name="equipmentType"
-              type="text"
               defaultValue={dock.equipmentType}
               required
               className="h-10 rounded-lg border border-black/[.08] bg-white px-3 text-sm text-black dark:border-white/[.145] dark:bg-black dark:text-zinc-50"
-            />
+            >
+              {Object.entries(DOCK_EQUIPMENT_TYPE_LABELS).map(([value, label]) => (
+                <option key={value} value={value}>
+                  {label}
+                </option>
+              ))}
+            </select>
           </div>
           <div className="flex flex-col gap-1">
             <label htmlFor="capacity" className="text-sm font-medium text-zinc-700 dark:text-zinc-300">

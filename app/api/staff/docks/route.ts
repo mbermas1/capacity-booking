@@ -2,7 +2,8 @@ import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { getStaffMember } from "@/lib/staff-session";
 import { canAccessWarehouse, canManageCapacityRules } from "@/lib/staff-roles";
-import { Prisma } from "@/app/generated/prisma/client";
+import { isDockEquipmentType } from "@/lib/dock-equipment-type";
+import { Prisma, type DockEquipmentType } from "@/app/generated/prisma/client";
 
 function isNonEmptyString(value: unknown): value is string {
   return typeof value === "string" && value.trim().length > 0;
@@ -50,7 +51,7 @@ export async function POST(request: NextRequest) {
   const errors: string[] = [];
   if (!isNonEmptyString(body.name)) errors.push("name is required");
   if (!isNonEmptyString(body.location)) errors.push("location is required");
-  if (!isNonEmptyString(body.equipmentType)) errors.push("equipmentType is required");
+  if (!isDockEquipmentType(body.equipmentType)) errors.push("equipmentType must be one of STANDARD, GROUND_LEVEL");
   if (body.warehouseId !== undefined && !isNonEmptyString(body.warehouseId)) {
     errors.push("warehouseId must be a non-empty string if provided");
   } else if (isNonEmptyString(body.warehouseId) && !canAccessWarehouse(staff, body.warehouseId)) {
@@ -81,7 +82,7 @@ export async function POST(request: NextRequest) {
       data: {
         name: (body.name as string).trim(),
         location: (body.location as string).trim(),
-        equipmentType: (body.equipmentType as string).trim(),
+        equipmentType: body.equipmentType as DockEquipmentType,
         warehouseId: isNonEmptyString(body.warehouseId) ? body.warehouseId : staff.warehouseId!,
         ...(body.capacity !== undefined ? { capacity: body.capacity as number } : {}),
         ...(body.minLeadTimeMinutes !== undefined ? { minLeadTimeMinutes: body.minLeadTimeMinutes as number } : {}),

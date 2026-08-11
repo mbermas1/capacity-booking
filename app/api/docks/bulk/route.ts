@@ -1,5 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
+import { isDockEquipmentType } from "@/lib/dock-equipment-type";
+import type { DockEquipmentType } from "@/app/generated/prisma/client";
 
 type BulkDockInput = {
   name?: unknown;
@@ -56,7 +58,7 @@ export async function POST(request: NextRequest) {
   docksInput.forEach((item, index) => {
     if (!isNonEmptyString(item?.name)) errors.push(`docks[${index}].name is required`);
     if (!isNonEmptyString(item?.location)) errors.push(`docks[${index}].location is required`);
-    if (!isNonEmptyString(item?.equipmentType)) errors.push(`docks[${index}].equipmentType is required`);
+    if (!isDockEquipmentType(item?.equipmentType)) errors.push(`docks[${index}].equipmentType must be one of STANDARD, GROUND_LEVEL`);
     if (!isNonEmptyString(item?.warehouseId)) errors.push(`docks[${index}].warehouseId is required`);
     if (item?.capacity !== undefined && !isPositiveInteger(item.capacity)) {
       errors.push(`docks[${index}].capacity must be a positive integer if provided`);
@@ -99,7 +101,7 @@ export async function POST(request: NextRequest) {
           data: {
             name: (item.name as string).trim(),
             location: (item.location as string).trim(),
-            equipmentType: (item.equipmentType as string).trim(),
+            equipmentType: item.equipmentType as DockEquipmentType,
             warehouseId: item.warehouseId as string,
             ...(item.capacity !== undefined ? { capacity: item.capacity as number } : {}),
             ...(item.minLeadTimeMinutes !== undefined ? { minLeadTimeMinutes: item.minLeadTimeMinutes as number } : {}),

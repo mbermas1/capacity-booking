@@ -50,7 +50,7 @@ model Dock {
   id                        String               @id @default(cuid())
   name                      String
   location                  String
-  equipmentType             String
+  equipmentType             DockEquipmentType
   capacity                  Int                  @default(1) // max simultaneous bookings
   minLeadTimeMinutes        Int? // null = no lead time requirement (portal bookings only)
   bufferMinutes             Int? // null = no buffer requirement, gap enforced before/after each booking
@@ -67,6 +67,11 @@ model Dock {
   updatedAt                 DateTime             @updatedAt
 
   @@index([warehouseId])
+}
+
+enum DockEquipmentType {
+  STANDARD
+  GROUND_LEVEL
 }
 
 model Carrier {
