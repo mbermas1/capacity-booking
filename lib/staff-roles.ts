@@ -84,6 +84,11 @@ export function canManageTagDefinitions(role: StaffRole): boolean {
   return role === "WAREHOUSE_MANAGER";
 }
 
+/** The "Set up your Warehouse" walkthrough is only meaningful for the role that owns warehouse setup. */
+export function canViewSetupGuide(role: StaffRole): boolean {
+  return role === "WAREHOUSE_MANAGER";
+}
+
 /** Only a SUPER_USER provisions new tenants and their warehouses. */
 export function canCreateAccount(role: StaffRole): boolean {
   return role === "SUPER_USER";

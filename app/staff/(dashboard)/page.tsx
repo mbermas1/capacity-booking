@@ -1,4 +1,6 @@
+import Link from "next/link";
 import { revalidatePath } from "next/cache";
+import { ListChecks } from "lucide-react";
 import { prisma } from "@/lib/prisma";
 import { hashPassword } from "@/lib/portal-auth";
 import { getStaffMember } from "@/lib/staff-session";
@@ -7,6 +9,7 @@ import { normalizeCarrierName } from "@/lib/carrier-identity";
 import { PartnerType } from "@/app/generated/prisma/client";
 import { PARTNER_TYPE_LABELS } from "@/lib/partner-type";
 import { computeCarrierScore, computeCarrierScoreTrend, type CarrierScore } from "@/lib/carrier-score";
+import { computeSetupProgress } from "@/lib/warehouse-setup";
 
 const TIER_STYLES: Record<CarrierScore["tier"], string> = {
   TRUSTED: "bg-green-100 text-green-800 dark:bg-green-950 dark:text-green-300",
@@ -111,6 +114,11 @@ export default async function StaffCarriersPage() {
   }
   const canManage = canManageCarrierAccounts(staff.role);
 
+  const setupProgress =
+    staff.role === "WAREHOUSE_MANAGER" && staff.warehouseId && staff.accountId
+      ? await computeSetupProgress(staff.warehouseId, staff.accountId)
+      : null;
+
   const [carriers, requirementTags] = await Promise.all([
     prisma.carrier.findMany({
       where: { accountId: accountWhereClause(staff) },
@@ -131,6 +139,32 @@ export default async function StaffCarriersPage() {
 
   return (
     <div className="flex flex-col gap-8">
+      {setupProgress && setupProgress.completed < setupProgress.total && (
+        <Link
+          href="/staff/setup"
+          className="flex items-center gap-4 rounded-2xl border border-black/[.08] bg-white p-5 transition-colors hover:bg-black/[.02] dark:border-white/[.145] dark:bg-[#0a0a0a] dark:hover:bg-white/[.03]"
+        >
+          <div className="flex h-11 w-11 shrink-0 items-center justify-center rounded-lg bg-blue-100 text-blue-700 dark:bg-blue-950 dark:text-blue-300">
+            <ListChecks className="h-5 w-5" />
+          </div>
+          <div className="flex-1">
+            <div className="flex items-center justify-between">
+              <span className="text-sm font-semibold text-black dark:text-zinc-50">Set up your Warehouse</span>
+              <span className="text-sm text-zinc-500 dark:text-zinc-400">
+                {setupProgress.completed} of {setupProgress.total} steps · Continue →
+              </span>
+            </div>
+            <div className="mt-2 flex gap-1">
+              {setupProgress.steps.map((s) => (
+                <div
+                  key={s.key}
+                  className={`h-1.5 flex-1 rounded-full ${s.complete ? "bg-foreground" : "bg-zinc-200 dark:bg-zinc-800"}`}
+                />
+              ))}
+            </div>
+          </div>
+        </Link>
+      )}
       {canManage && (
       <section>
         <h1 className="mb-4 text-xl font-semibold text-black dark:text-zinc-50">

@@ -9,6 +9,7 @@ import {
   FileText,
   Gauge,
   Inbox,
+  ListChecks,
   LogOut,
   Scale,
   Tag,
@@ -30,6 +31,7 @@ import {
   canOperateSchedule,
   canResolveAppeals,
   canViewReports,
+  canViewSetupGuide,
   StaffRole,
 } from "@/lib/staff-roles";
 
@@ -45,6 +47,10 @@ type NavSection = { label: string; items: NavItem[] };
 
 function buildSections(role: StaffRole): NavSection[] {
   return [
+    {
+      label: "Setup",
+      items: [{ label: "Warehouse Setup", href: "/staff/setup", icon: ListChecks, visible: canViewSetupGuide(role) }],
+    },
     {
       label: "Operations",
       items: [
