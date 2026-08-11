@@ -1,3 +1,4 @@
+import Image from "next/image";
 import Link from "next/link";
 import { redirect } from "next/navigation";
 import { authenticateStaff, createStaffSession } from "@/lib/staff-session";
@@ -32,6 +33,7 @@ export default async function StaffLoginPage({
   return (
     <div className="flex flex-1 flex-col items-center justify-center bg-zinc-50 font-sans dark:bg-black">
       <main className="w-full max-w-sm rounded-2xl border border-black/[.08] bg-white p-8 dark:border-white/[.145] dark:bg-[#0a0a0a]">
+        <Image src="/logo.png" alt="CapacityBooking" width={159} height={40} className="mx-auto mb-6 h-10 w-auto" priority />
         <h1 className="mb-6 text-xl font-semibold text-black dark:text-zinc-50">Staff Login</h1>
 
         {error && (
