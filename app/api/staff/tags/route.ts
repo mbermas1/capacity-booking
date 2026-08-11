@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
-import { getStaffMember, getStaffSession } from "@/lib/staff-session";
-import { canManageTagDefinitions } from "@/lib/staff-roles";
+import { getStaffMember } from "@/lib/staff-session";
+import { accountWhereClause, canManageTagDefinitions } from "@/lib/staff-roles";
 import { TagCategory, Prisma } from "@/app/generated/prisma/client";
 
 function isNonEmptyString(value: unknown): value is string {
@@ -9,8 +9,8 @@ function isNonEmptyString(value: unknown): value is string {
 }
 
 export async function GET(request: NextRequest) {
-  const session = await getStaffSession();
-  if (!session) {
+  const staff = await getStaffMember();
+  if (!staff) {
     return NextResponse.json({ error: "Not authenticated" }, { status: 401 });
   }
 
@@ -25,7 +25,10 @@ export async function GET(request: NextRequest) {
   }
 
   const tags = await prisma.tag.findMany({
-    where: category !== null ? { category: category as TagCategory } : undefined,
+    where: {
+      accountId: accountWhereClause(staff),
+      ...(category !== null ? { category: category as TagCategory } : {}),
+    },
     orderBy: [{ category: "asc" }, { name: "asc" }],
   });
 
@@ -43,7 +46,7 @@ export async function POST(request: NextRequest) {
   if (!staff) {
     return NextResponse.json({ error: "Not authenticated" }, { status: 401 });
   }
-  if (!canManageTagDefinitions(staff.role)) {
+  if (!canManageTagDefinitions(staff.role) || !staff.accountId) {
     return NextResponse.json({ error: "Forbidden" }, { status: 403 });
   }
 
@@ -81,6 +84,7 @@ export async function POST(request: NextRequest) {
   try {
     const tag = await prisma.tag.create({
       data: {
+        accountId: staff.accountId,
         category: body.category as TagCategory,
         name: (body.name as string).trim(),
         minDurationMinutes,

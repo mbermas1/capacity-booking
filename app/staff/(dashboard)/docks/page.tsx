@@ -17,7 +17,7 @@ async function createDock(formData: FormData) {
   const capacityRaw = String(formData.get("capacity") ?? "").trim();
   const capacity = Number.isInteger(Number(capacityRaw)) && Number(capacityRaw) >= 1 ? Number(capacityRaw) : 1;
   const warehouseIdRaw = String(formData.get("warehouseId") ?? "").trim();
-  const warehouseId = warehouseIdRaw && canAccessWarehouse(staff, warehouseIdRaw) ? warehouseIdRaw : staff.warehouseId;
+  const warehouseId = warehouseIdRaw && canAccessWarehouse(staff, warehouseIdRaw) ? warehouseIdRaw : staff.warehouseId!;
 
   if (!name || !location || !equipmentType) return;
 
@@ -118,7 +118,7 @@ export default async function StaffDocksPage() {
               <select
                 id="warehouseId"
                 name="warehouseId"
-                defaultValue={staff.warehouseId}
+                defaultValue={staff.warehouseId ?? undefined}
                 className="h-10 rounded-lg border border-black/[.08] bg-white px-3 text-sm text-black dark:border-white/[.145] dark:bg-black dark:text-zinc-50"
               >
                 {accessibleWarehouses.map((w) => (

@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
-import { getStaffSession } from "@/lib/staff-session";
+import { getStaffMember } from "@/lib/staff-session";
+import { canManageCarrierAccounts } from "@/lib/staff-roles";
 import { hashPassword } from "@/lib/portal-auth";
 import { normalizeCarrierName } from "@/lib/carrier-identity";
 import { PartnerType } from "@/app/generated/prisma/client";
@@ -19,9 +20,12 @@ function isNonEmptyString(value: unknown): value is string {
 }
 
 export async function POST(request: NextRequest) {
-  const session = await getStaffSession();
-  if (!session) {
+  const staff = await getStaffMember();
+  if (!staff) {
     return NextResponse.json({ error: "Not authenticated" }, { status: 401 });
+  }
+  if (!canManageCarrierAccounts(staff.role) || !staff.accountId) {
+    return NextResponse.json({ error: "Not authorized" }, { status: 403 });
   }
 
   let body: CreateCarrierAccountBody;
@@ -59,8 +63,14 @@ export async function POST(request: NextRequest) {
 
   const nameKey = normalizeCarrierName(name);
   const carrier = await prisma.carrier.upsert({
-    where: { nameKey },
-    create: { name, nameKey, email: notificationEmail, ...(partnerType !== undefined ? { partnerType } : {}) },
+    where: { accountId_nameKey: { accountId: staff.accountId, nameKey } },
+    create: {
+      accountId: staff.accountId,
+      name,
+      nameKey,
+      email: notificationEmail,
+      ...(partnerType !== undefined ? { partnerType } : {}),
+    },
     update: { email: notificationEmail, ...(partnerType !== undefined ? { partnerType } : {}) },
   });
 

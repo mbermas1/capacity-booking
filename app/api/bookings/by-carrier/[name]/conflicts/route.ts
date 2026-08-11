@@ -20,11 +20,15 @@ export async function GET(
   const searchParams = request.nextUrl.searchParams;
   const startTimeParam = searchParams.get("startTime");
   const endTimeParam = searchParams.get("endTime");
+  const warehouseId = searchParams.get("warehouseId");
 
   const errors: string[] = [];
 
   if (carrierName.length === 0) {
     errors.push("carrier name must not be empty");
+  }
+  if (!warehouseId) {
+    errors.push("warehouseId query parameter is required");
   }
 
   const startTime = isNonEmptyString(startTimeParam) ? new Date(startTimeParam) : null;
@@ -45,9 +49,14 @@ export async function GET(
     return NextResponse.json({ error: "Validation failed", details: errors }, { status: 400 });
   }
 
+  const warehouse = await prisma.warehouse.findUnique({ where: { id: warehouseId! }, select: { accountId: true } });
+  if (!warehouse) {
+    return NextResponse.json({ error: "Warehouse not found" }, { status: 404 });
+  }
+
   const bookings = await prisma.booking.findMany({
     where: {
-      carrier: { name: carrierName },
+      carrier: { name: carrierName, accountId: warehouse.accountId },
       startTime: { lt: endTime as Date },
       endTime: { gt: startTime as Date },
     },

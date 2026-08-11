@@ -157,8 +157,16 @@ export async function POST(request: NextRequest) {
   }
 
   try {
+    const dock = await prisma.dock.findUnique({
+      where: { id: body.dockId as string },
+      include: { warehouse: true },
+    });
+    if (!dock) {
+      return NextResponse.json({ error: "Dock not found" }, { status: 404 });
+    }
+
     const carrierName = (body.carrierName as string).trim();
-    const carrier = await findOrCreateCarrierByName(prisma, carrierName);
+    const carrier = await findOrCreateCarrierByName(prisma, dock.warehouse.accountId, carrierName);
 
     const booking = await createBooking({
       dockId: body.dockId as string,

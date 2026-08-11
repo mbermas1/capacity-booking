@@ -5,6 +5,7 @@ import { redirect } from "next/navigation";
 import { getStaffMember, requireStaffSession, STAFF_SESSION_COOKIE } from "@/lib/staff-session";
 import {
   canApproveRequests,
+  canCreateAccount,
   canCreateWarehouse,
   canManageCapacityRules,
   canManageStaff,
@@ -33,8 +34,12 @@ export default async function StaffDashboardLayout({ children }: { children: Rea
             <div className="flex items-center gap-3">
               <Image src="/logo.png" alt="CapacityBooking" width={159} height={40} className="h-8 w-auto" priority />
               <div className="flex flex-col">
-                <span className="text-lg font-semibold text-black dark:text-zinc-50">{staff?.warehouse.name}</span>
-                <span className="text-xs text-zinc-500 dark:text-zinc-400">{staff?.warehouse.location}</span>
+                <span className="text-lg font-semibold text-black dark:text-zinc-50">
+                  {staff?.warehouse ? staff.warehouse.name : "All Accounts"}
+                </span>
+                <span className="text-xs text-zinc-500 dark:text-zinc-400">
+                  {staff?.warehouse ? staff.warehouse.location : "Super User"}
+                </span>
               </div>
             </div>
             <div className="flex items-center gap-4">
@@ -50,6 +55,11 @@ export default async function StaffDashboardLayout({ children }: { children: Rea
             </div>
           </div>
           <nav className="flex items-center gap-4 text-sm font-medium text-zinc-600 dark:text-zinc-400">
+            {staff && canCreateAccount(staff.role) && (
+              <Link href="/staff/accounts" className="hover:text-black dark:hover:text-zinc-50">
+                Accounts
+              </Link>
+            )}
             {staff && canCreateWarehouse(staff.role) && (
               <Link href="/staff/warehouses" className="hover:text-black dark:hover:text-zinc-50">
                 Warehouses

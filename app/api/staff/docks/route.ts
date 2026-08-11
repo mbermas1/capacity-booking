@@ -82,7 +82,7 @@ export async function POST(request: NextRequest) {
         name: (body.name as string).trim(),
         location: (body.location as string).trim(),
         equipmentType: (body.equipmentType as string).trim(),
-        warehouseId: isNonEmptyString(body.warehouseId) ? body.warehouseId : staff.warehouseId,
+        warehouseId: isNonEmptyString(body.warehouseId) ? body.warehouseId : staff.warehouseId!,
         ...(body.capacity !== undefined ? { capacity: body.capacity as number } : {}),
         ...(body.minLeadTimeMinutes !== undefined ? { minLeadTimeMinutes: body.minLeadTimeMinutes as number } : {}),
         ...(body.bufferMinutes !== undefined ? { bufferMinutes: body.bufferMinutes as number } : {}),

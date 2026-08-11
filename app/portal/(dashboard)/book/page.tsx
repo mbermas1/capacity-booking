@@ -60,8 +60,15 @@ async function bookSlot(formData: FormData) {
       : undefined;
 
   try {
-    const dock = await prisma.dock.findUnique({ where: { id: dockId }, select: { minLeadTimeMinutes: true } });
-    if (priority !== BookingPriority.HIGH && dock && checkLeadTime(dock.minLeadTimeMinutes, startTime, new Date())) {
+    const dock = await prisma.dock.findUnique({
+      where: { id: dockId },
+      select: { minLeadTimeMinutes: true, warehouse: { select: { accountId: true } } },
+    });
+    if (!dock || dock.warehouse.accountId !== carrier.accountId) {
+      params.set("error", "invalid");
+      redirect(`/portal/book?${params.toString()}`);
+    }
+    if (priority !== BookingPriority.HIGH && checkLeadTime(dock.minLeadTimeMinutes, startTime, new Date())) {
       throw new LeadTimeError(dock.minLeadTimeMinutes as number);
     }
 
@@ -114,9 +121,13 @@ export default async function PortalBookPage({
 }) {
   const { dockId, startTime: startTimeParam, endTime: endTimeParam, error } = await searchParams;
 
+  const user = await getPortalUser();
+  if (!user) redirect("/portal/login");
+  const accountId = user.carrier.accountId;
+
   const [docks, commodityTags] = await Promise.all([
-    prisma.dock.findMany({ orderBy: { name: "asc" } }),
-    prisma.tag.findMany({ where: { category: "COMMODITY" }, orderBy: { name: "asc" } }),
+    prisma.dock.findMany({ where: { warehouse: { accountId } }, orderBy: { name: "asc" } }),
+    prisma.tag.findMany({ where: { category: "COMMODITY", accountId }, orderBy: { name: "asc" } }),
   ]);
 
   const startTime = startTimeParam ? parseUtc(startTimeParam) : null;

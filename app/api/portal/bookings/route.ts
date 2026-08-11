@@ -158,9 +158,12 @@ export async function POST(request: NextRequest) {
   try {
     const dock = await prisma.dock.findUnique({
       where: { id: body.dockId as string },
-      select: { minLeadTimeMinutes: true },
+      select: { minLeadTimeMinutes: true, warehouse: { select: { accountId: true } } },
     });
-    if (priority !== BookingPriority.HIGH && dock && checkLeadTime(dock.minLeadTimeMinutes, startTime as Date, new Date())) {
+    if (!dock || dock.warehouse.accountId !== carrier.accountId) {
+      return NextResponse.json({ error: "Dock not found" }, { status: 404 });
+    }
+    if (priority !== BookingPriority.HIGH && checkLeadTime(dock.minLeadTimeMinutes, startTime as Date, new Date())) {
       throw new LeadTimeError(dock.minLeadTimeMinutes as number);
     }
 

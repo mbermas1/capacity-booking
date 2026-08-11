@@ -18,11 +18,15 @@ export async function GET(
   const { name } = await params;
   const carrierName = name.trim();
   const searchParams = request.nextUrl.searchParams;
+  const warehouseId = searchParams.get("warehouseId");
 
   const errors: string[] = [];
 
   if (carrierName.length === 0) {
     errors.push("carrier name must not be empty");
+  }
+  if (!warehouseId) {
+    errors.push("warehouseId query parameter is required");
   }
 
   const limitParam = parsePositiveInt(searchParams.get("limit"));
@@ -41,10 +45,17 @@ export async function GET(
     return NextResponse.json({ error: "Validation failed", details: errors }, { status: 400 });
   }
 
+  const warehouse = await prisma.warehouse.findUnique({ where: { id: warehouseId! }, select: { accountId: true } });
+  if (!warehouse) {
+    return NextResponse.json({ error: "Warehouse not found" }, { status: 404 });
+  }
+
+  const carrierFilter = { name: carrierName, accountId: warehouse.accountId };
+
   const [total, bookings] = await Promise.all([
-    prisma.booking.count({ where: { carrier: { name: carrierName } } }),
+    prisma.booking.count({ where: { carrier: carrierFilter } }),
     prisma.booking.findMany({
-      where: { carrier: { name: carrierName } },
+      where: { carrier: carrierFilter },
       include: CARRIER_NAME_INCLUDE,
       orderBy: { startTime: "desc" },
       skip: offset,

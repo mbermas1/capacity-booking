@@ -1,7 +1,7 @@
 import Link from "next/link";
 import { prisma } from "@/lib/prisma";
 import { getStaffMember } from "@/lib/staff-session";
-import { canViewReports, getWarehouseScope, warehouseWhereClause } from "@/lib/staff-roles";
+import { accountWhereClause, canViewReports, getWarehouseScope, warehouseWhereClause } from "@/lib/staff-roles";
 import { normalizeCarrierName } from "@/lib/carrier-identity";
 import { computeUtilization, computeUtilizationTrend } from "@/lib/utilization";
 import { computeDockDwellStats, computeDockDwellTrend } from "@/lib/dock-dwell";
@@ -112,7 +112,7 @@ export default async function StaffAnalyticsPage({
 
   const [stats, carriers, trend, allDocks] = await Promise.all([
     computeUtilization(dayStart, dayEnd, { carrierName, warehouseId: warehouseWhereClause(staff) }),
-    prisma.carrier.findMany({ orderBy: { name: "asc" }, select: { name: true } }),
+    prisma.carrier.findMany({ where: { accountId: accountWhereClause(staff) }, orderBy: { name: "asc" }, select: { name: true } }),
     computeUtilizationTrend(dayStart, trendDays, { carrierName, warehouseId: warehouseWhereClause(staff) }),
     prisma.dock.findMany({
       where: { warehouseId: warehouseWhereClause(staff) },
@@ -133,7 +133,7 @@ export default async function StaffAnalyticsPage({
   let carrierScoreTrend: Awaited<ReturnType<typeof computeCarrierScoreTrend>> | null = null;
   if (carrierName) {
     filteredCarrier = await prisma.carrier.findFirst({
-      where: { nameKey: normalizeCarrierName(carrierName) },
+      where: { nameKey: normalizeCarrierName(carrierName), accountId: accountWhereClause(staff) },
       select: { id: true, name: true },
     });
     if (filteredCarrier) {

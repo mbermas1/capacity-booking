@@ -2,7 +2,7 @@ import { revalidatePath } from "next/cache";
 import { prisma } from "@/lib/prisma";
 import { hashPassword } from "@/lib/portal-auth";
 import { getStaffMember } from "@/lib/staff-session";
-import { canManageCarrierAccounts } from "@/lib/staff-roles";
+import { accountWhereClause, canManageCarrierAccounts } from "@/lib/staff-roles";
 import { normalizeCarrierName } from "@/lib/carrier-identity";
 import { PartnerType } from "@/app/generated/prisma/client";
 import { PARTNER_TYPE_LABELS } from "@/lib/partner-type";
@@ -52,7 +52,7 @@ async function createCarrierAccount(formData: FormData) {
   "use server";
 
   const staff = await getStaffMember();
-  if (!staff || !canManageCarrierAccounts(staff.role)) return;
+  if (!staff || !canManageCarrierAccounts(staff.role) || !staff.accountId) return;
 
   const name = String(formData.get("name") ?? "").trim();
   const notificationEmail = String(formData.get("notificationEmail") ?? "").trim();
@@ -68,8 +68,8 @@ async function createCarrierAccount(formData: FormData) {
 
   const nameKey = normalizeCarrierName(name);
   const carrier = await prisma.carrier.upsert({
-    where: { nameKey },
-    create: { name, nameKey, email: notificationEmail || undefined, partnerType },
+    where: { accountId_nameKey: { accountId: staff.accountId, nameKey } },
+    create: { accountId: staff.accountId, name, nameKey, email: notificationEmail || undefined, partnerType },
     update: { email: notificationEmail || undefined, partnerType },
   });
 
@@ -86,7 +86,10 @@ async function updateCarrierRequirementTags(carrierId: string, formData: FormDat
   "use server";
 
   const staff = await getStaffMember();
-  if (!staff || !canManageCarrierAccounts(staff.role)) return;
+  if (!staff || !canManageCarrierAccounts(staff.role) || !staff.accountId) return;
+
+  const carrier = await prisma.carrier.findUnique({ where: { id: carrierId }, select: { accountId: true } });
+  if (!carrier || carrier.accountId !== staff.accountId) return;
 
   const selectedTagIds = formData.getAll("tagIds").map(String);
 
@@ -110,10 +113,14 @@ export default async function StaffCarriersPage() {
 
   const [carriers, requirementTags] = await Promise.all([
     prisma.carrier.findMany({
+      where: { accountId: accountWhereClause(staff) },
       orderBy: { name: "asc" },
       include: { _count: { select: { bookings: true, users: true } }, tags: { include: { tag: true } } },
     }),
-    prisma.tag.findMany({ where: { category: "CARRIER_REQUIREMENT" }, orderBy: { name: "asc" } }),
+    prisma.tag.findMany({
+      where: { category: "CARRIER_REQUIREMENT", accountId: accountWhereClause(staff) },
+      orderBy: { name: "asc" },
+    }),
   ]);
   const scores = new Map(
     await Promise.all(carriers.map(async (c) => [c.id, await computeCarrierScore(c.id)] as const)),

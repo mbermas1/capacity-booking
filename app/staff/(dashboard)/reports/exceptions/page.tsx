@@ -1,6 +1,6 @@
 import Link from "next/link";
 import { getStaffMember } from "@/lib/staff-session";
-import { canViewReports, getWarehouseScope, warehouseWhereClause } from "@/lib/staff-roles";
+import { accountWhereClause, canViewReports, getWarehouseScope, warehouseWhereClause } from "@/lib/staff-roles";
 import { prisma } from "@/lib/prisma";
 import { computeExceptionReport, type ExceptionRow } from "@/lib/reports";
 import { formatTime } from "@/lib/booking-display";
@@ -66,7 +66,7 @@ export default async function ExceptionReportPage({
 
   const [rows, carriers] = await Promise.all([
     computeExceptionReport(start, end, { carrierName, warehouseId: warehouseWhereClause(staff) }),
-    prisma.carrier.findMany({ orderBy: { name: "asc" }, select: { name: true } }),
+    prisma.carrier.findMany({ where: { accountId: accountWhereClause(staff) }, orderBy: { name: "asc" }, select: { name: true } }),
   ]);
 
   const csvHref = `/api/staff/reports/exceptions/export${buildQuery({

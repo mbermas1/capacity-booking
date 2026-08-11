@@ -1,26 +1,30 @@
 import { NextRequest, NextResponse } from "next/server";
 import { randomBytes } from "node:crypto";
 import { prisma } from "@/lib/prisma";
-import { getStaffMember, getStaffSession } from "@/lib/staff-session";
-import { canCreateWarehouse } from "@/lib/staff-roles";
+import { getStaffMember } from "@/lib/staff-session";
+import { accountWhereClause, canCreateWarehouse } from "@/lib/staff-roles";
 
 function isNonEmptyString(value: unknown): value is string {
   return typeof value === "string" && value.trim().length > 0;
 }
 
 export async function GET() {
-  const session = await getStaffSession();
-  if (!session) {
+  const staff = await getStaffMember();
+  if (!staff) {
     return NextResponse.json({ error: "Not authenticated" }, { status: 401 });
   }
 
-  const warehouses = await prisma.warehouse.findMany({ orderBy: { name: "asc" } });
+  const warehouses = await prisma.warehouse.findMany({
+    where: { accountId: accountWhereClause(staff) },
+    orderBy: { name: "asc" },
+  });
   return NextResponse.json(warehouses);
 }
 
 type CreateWarehouseBody = {
   name?: unknown;
   location?: unknown;
+  accountId?: unknown;
 };
 
 export async function POST(request: NextRequest) {
@@ -45,15 +49,22 @@ export async function POST(request: NextRequest) {
   const errors: string[] = [];
   if (!isNonEmptyString(body.name)) errors.push("name is required");
   if (!isNonEmptyString(body.location)) errors.push("location is required");
+  if (!isNonEmptyString(body.accountId)) errors.push("accountId is required");
 
   if (errors.length > 0) {
     return NextResponse.json({ error: "Validation failed", details: errors }, { status: 400 });
+  }
+
+  const account = await prisma.account.findUnique({ where: { id: body.accountId as string } });
+  if (!account) {
+    return NextResponse.json({ error: "Account not found" }, { status: 404 });
   }
 
   const warehouse = await prisma.warehouse.create({
     data: {
       name: (body.name as string).trim(),
       location: (body.location as string).trim(),
+      accountId: account.id,
       publicBookingSlug: randomBytes(16).toString("hex"),
     },
   });

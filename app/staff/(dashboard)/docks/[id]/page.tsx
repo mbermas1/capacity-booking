@@ -137,7 +137,7 @@ export default async function StaffDockDetailPage({ params }: { params: Promise<
     return <p className="text-sm text-zinc-600 dark:text-zinc-400">You don&apos;t have access to this page.</p>;
   }
 
-  const allTags = await prisma.tag.findMany({ orderBy: { name: "asc" } });
+  const allTags = await prisma.tag.findMany({ where: { accountId: staff.accountId! }, orderBy: { name: "asc" } });
   const hoursByDay = new Map(dock.operatingHours.map((h) => [h.dayOfWeek, h]));
   const assignedTagIds = new Set(dock.tags.map((dt) => dt.tagId));
   const dwell = await computeDockDwellStats(dockId);

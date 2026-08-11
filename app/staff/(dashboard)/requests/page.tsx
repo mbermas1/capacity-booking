@@ -47,7 +47,7 @@ async function approveRequest(requestId: string) {
   const params = new URLSearchParams();
 
   try {
-    const carrier = await findOrCreateCarrierByName(prisma, bookingRequest.companyName, {
+    const carrier = await findOrCreateCarrierByName(prisma, staff.accountId!, bookingRequest.companyName, {
       email: bookingRequest.contactEmail,
     });
 

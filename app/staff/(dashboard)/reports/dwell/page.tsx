@@ -2,6 +2,7 @@ import Link from "next/link";
 import { revalidatePath } from "next/cache";
 import { getStaffMember } from "@/lib/staff-session";
 import {
+  accountWhereClause,
   canAccessWarehouse,
   canManageCapacityRules,
   canViewReports,
@@ -84,7 +85,7 @@ export default async function DwellReportPage({
 
   const [rows, carriers, rateWarehouses] = await Promise.all([
     computeDwellReport(start, end, { carrierName, warehouseId: warehouseWhereClause(staff) }),
-    prisma.carrier.findMany({ orderBy: { name: "asc" }, select: { name: true } }),
+    prisma.carrier.findMany({ where: { accountId: accountWhereClause(staff) }, orderBy: { name: "asc" }, select: { name: true } }),
     canEditRate
       ? prisma.warehouse.findMany({
           where: scope === null ? {} : { id: { in: scope } },

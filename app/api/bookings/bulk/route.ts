@@ -157,8 +157,12 @@ export async function POST(request: NextRequest) {
   }
 
   const requestedDockIds = [...new Set(parsed.map((item) => item.dockId))];
-  const foundDocks = await prisma.dock.findMany({ where: { id: { in: requestedDockIds } } });
+  const foundDocks = await prisma.dock.findMany({
+    where: { id: { in: requestedDockIds } },
+    include: { warehouse: true },
+  });
   const foundDockIds = new Set(foundDocks.map((dock) => dock.id));
+  const accountIdByDockId = new Map(foundDocks.map((dock) => [dock.id, dock.warehouse.accountId]));
   const missingDockIds = requestedDockIds.filter((id) => !foundDockIds.has(id));
 
   if (missingDockIds.length > 0) {
@@ -174,7 +178,7 @@ export async function POST(request: NextRequest) {
       for (let index = 0; index < parsed.length; index++) {
         const item = parsed[index];
 
-        const carrier = await findOrCreateCarrierByName(tx, item.carrierName);
+        const carrier = await findOrCreateCarrierByName(tx, accountIdByDockId.get(item.dockId)!, item.carrierName);
 
         try {
           created.push(

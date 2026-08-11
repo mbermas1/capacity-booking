@@ -14,7 +14,7 @@ async function createTag(formData: FormData) {
   "use server";
 
   const staff = await getStaffMember();
-  if (!staff || !canManageTagDefinitions(staff.role)) return;
+  if (!staff || !canManageTagDefinitions(staff.role) || !staff.accountId) return;
 
   const category = String(formData.get("category") ?? "");
   const name = String(formData.get("name") ?? "").trim();
@@ -26,6 +26,7 @@ async function createTag(formData: FormData) {
 
   await prisma.tag.create({
     data: {
+      accountId: staff.accountId,
       category: category as TagCategory,
       name,
       minDurationMinutes: Number.isInteger(minDurationMinutes) ? minDurationMinutes : undefined,
@@ -42,7 +43,10 @@ export default async function StaffTagsPage() {
     return <p className="text-sm text-zinc-600 dark:text-zinc-400">You don&apos;t have access to this page.</p>;
   }
 
-  const tags = await prisma.tag.findMany({ orderBy: [{ category: "asc" }, { name: "asc" }] });
+  const tags = await prisma.tag.findMany({
+    where: { accountId: staff.accountId! },
+    orderBy: [{ category: "asc" }, { name: "asc" }],
+  });
   const grouped = Object.values(TagCategory).map((category) => ({
     category,
     tags: tags.filter((t) => t.category === category),
