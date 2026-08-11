@@ -58,14 +58,16 @@ aside.sidebar[data-collapsed="true"] .logo-mark {
   display: block;
 }
 
-/* Modal popovers (Accounts/Warehouses "Add" buttons) */
+/* Modal popovers (Accounts/Warehouses "Add"/"Edit" buttons) — each popover element
+   sets its own opaque bg-white/dark:bg-[#0a0a0a] via Tailwind; this rule only resets
+   the UA stylesheet's default border/padding and fixes centering (Tailwind's preflight
+   zeroes margin, which breaks the UA stylesheet's `margin: auto` centering trick). */
 [popover] {
   position: fixed;
   inset: 0;
-  margin: auto; /* Tailwind's preflight zeroes margin, which breaks the UA stylesheet's centering */
+  margin: auto;
   border: none;
   padding: 0;
-  background: transparent;
   overflow: visible;
   max-height: calc(100vh - 4rem);
 }
