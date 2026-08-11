@@ -82,7 +82,7 @@ export default async function PublicBookingPage({
       id: true,
       name: true,
       location: true,
-      docks: { select: { id: true, name: true, location: true, equipmentType: true }, orderBy: { name: "asc" } },
+      docks: { select: { id: true, name: true, location: true, dockType: true }, orderBy: { name: "asc" } },
     },
   });
 

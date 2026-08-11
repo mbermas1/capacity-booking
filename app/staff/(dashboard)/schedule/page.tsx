@@ -5,7 +5,7 @@ import { getStaffMember } from "@/lib/staff-session";
 import { canAccessWarehouse, canOperateSchedule, getWarehouseScope, warehouseWhereClause } from "@/lib/staff-roles";
 import { detectNoShowMany, checkInBooking, completeBooking } from "@/lib/bookings";
 import { STATUS_STYLES, LOAD_TYPE_STYLES, PRIORITY_STYLES, formatTime } from "@/lib/booking-display";
-import { DOCK_EQUIPMENT_TYPE_LABELS } from "@/lib/dock-equipment-type";
+import { DOCK_TYPE_LABELS } from "@/lib/dock-type";
 
 async function assertBookingAccess(staff: NonNullable<Awaited<ReturnType<typeof getStaffMember>>>, bookingId: string): Promise<boolean> {
   const booking = await prisma.booking.findUnique({ where: { id: bookingId }, select: { dock: { select: { warehouseId: true } } } });
@@ -166,7 +166,7 @@ export default async function StaffSchedulePage({
                     {dock.name}
                   </h2>
                   <span className="text-xs text-zinc-500 dark:text-zinc-400">
-                    {dock.location} · {DOCK_EQUIPMENT_TYPE_LABELS[dock.equipmentType]}
+                    {dock.location} · {DOCK_TYPE_LABELS[dock.dockType]}
                   </span>
                 </div>
 

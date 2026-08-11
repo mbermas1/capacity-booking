@@ -11,7 +11,7 @@ export async function GET(request: NextRequest, { params }: { params: Promise<{ 
       name: true,
       location: true,
       docks: {
-        select: { id: true, name: true, location: true, equipmentType: true },
+        select: { id: true, name: true, location: true, dockType: true },
         orderBy: { name: "asc" },
       },
     },

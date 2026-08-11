@@ -1,12 +1,12 @@
 import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
-import { isDockEquipmentType } from "@/lib/dock-equipment-type";
-import { Prisma, type DockEquipmentType } from "@/app/generated/prisma/client";
+import { isDockType, DOCK_TYPE_VALUES } from "@/lib/dock-type";
+import { Prisma, type DockType } from "@/app/generated/prisma/client";
 
 type UpdateDockBody = {
   name?: unknown;
   location?: unknown;
-  equipmentType?: unknown;
+  dockType?: unknown;
   warehouseId?: unknown;
   capacity?: unknown;
   minLeadTimeMinutes?: unknown;
@@ -61,7 +61,7 @@ export async function PATCH(
   const data: {
     name?: string;
     location?: string;
-    equipmentType?: DockEquipmentType;
+    dockType?: DockType;
     warehouseId?: string;
     capacity?: number;
     minLeadTimeMinutes?: number | null;
@@ -80,9 +80,9 @@ export async function PATCH(
     else data.location = body.location.trim();
   }
 
-  if (body.equipmentType !== undefined) {
-    if (!isDockEquipmentType(body.equipmentType)) errors.push("equipmentType must be one of STANDARD, GROUND_LEVEL");
-    else data.equipmentType = body.equipmentType;
+  if (body.dockType !== undefined) {
+    if (!isDockType(body.dockType)) errors.push(`dockType must be one of ${DOCK_TYPE_VALUES.join(", ")}`);
+    else data.dockType = body.dockType;
   }
 
   if (body.warehouseId !== undefined) {
@@ -121,7 +121,7 @@ export async function PATCH(
 
   if (Object.keys(data).length === 0 && errors.length === 0) {
     errors.push(
-      "At least one of name, location, equipmentType, warehouseId, capacity, minLeadTimeMinutes, bufferMinutes, reservedHighPrioritySlots, requiresManualReview must be provided",
+      "At least one of name, location, dockType, warehouseId, capacity, minLeadTimeMinutes, bufferMinutes, reservedHighPrioritySlots, requiresManualReview must be provided",
     );
   }
 

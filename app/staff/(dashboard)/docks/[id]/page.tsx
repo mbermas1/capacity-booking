@@ -6,7 +6,7 @@ import { TagCategory } from "@/app/generated/prisma/client";
 import { getStaffMember } from "@/lib/staff-session";
 import { canAccessWarehouse, canManageCapacityRules } from "@/lib/staff-roles";
 import { computeDockDwellStats, computeDockDwellTrend } from "@/lib/dock-dwell";
-import { DOCK_EQUIPMENT_TYPE_LABELS, isDockEquipmentType } from "@/lib/dock-equipment-type";
+import { DOCK_TYPE_LABELS, isDockType } from "@/lib/dock-type";
 
 async function assertDockAccess(dockId: string): Promise<boolean> {
   const staff = await getStaffMember();
@@ -37,7 +37,7 @@ async function updateDockDetails(dockId: string, formData: FormData) {
 
   const name = String(formData.get("name") ?? "").trim();
   const location = String(formData.get("location") ?? "").trim();
-  const equipmentType = formData.get("equipmentType");
+  const dockType = formData.get("dockType");
   const capacityRaw = String(formData.get("capacity") ?? "").trim();
   const capacity = Number.isInteger(Number(capacityRaw)) && Number(capacityRaw) >= 1 ? Number(capacityRaw) : 1;
   const minLeadTimeMinutes = parseOptionalNonNegativeInt(String(formData.get("minLeadTimeMinutes") ?? ""));
@@ -45,14 +45,14 @@ async function updateDockDetails(dockId: string, formData: FormData) {
   const reservedHighPrioritySlots = parseOptionalNonNegativeInt(String(formData.get("reservedHighPrioritySlots") ?? ""));
   const requiresManualReview = formData.get("requiresManualReview") === "on";
 
-  if (!name || !location || !isDockEquipmentType(equipmentType)) return;
+  if (!name || !location || !isDockType(dockType)) return;
 
   await prisma.dock.update({
     where: { id: dockId },
     data: {
       name,
       location,
-      equipmentType,
+      dockType,
       capacity,
       minLeadTimeMinutes,
       bufferMinutes,
@@ -212,17 +212,17 @@ export default async function StaffDockDetailPage({ params }: { params: Promise<
             />
           </div>
           <div className="flex flex-col gap-1">
-            <label htmlFor="equipmentType" className="text-sm font-medium text-zinc-700 dark:text-zinc-300">
+            <label htmlFor="dockType" className="text-sm font-medium text-zinc-700 dark:text-zinc-300">
               Dock Type
             </label>
             <select
-              id="equipmentType"
-              name="equipmentType"
-              defaultValue={dock.equipmentType}
+              id="dockType"
+              name="dockType"
+              defaultValue={dock.dockType}
               required
               className="h-10 rounded-lg border border-black/[.08] bg-white px-3 text-sm text-black dark:border-white/[.145] dark:bg-black dark:text-zinc-50"
             >
-              {Object.entries(DOCK_EQUIPMENT_TYPE_LABELS).map(([value, label]) => (
+              {Object.entries(DOCK_TYPE_LABELS).map(([value, label]) => (
                 <option key={value} value={value}>
                   {label}
                 </option>

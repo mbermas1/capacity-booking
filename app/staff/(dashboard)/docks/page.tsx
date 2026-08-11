@@ -4,7 +4,7 @@ import { prisma } from "@/lib/prisma";
 import { getStaffMember } from "@/lib/staff-session";
 import { canAccessWarehouse, canManageCapacityRules, getWarehouseScope, warehouseWhereClause } from "@/lib/staff-roles";
 import { computeDockDwellStats, computeDockDwellTrend } from "@/lib/dock-dwell";
-import { DOCK_EQUIPMENT_TYPE_LABELS, isDockEquipmentType } from "@/lib/dock-equipment-type";
+import { DOCK_TYPE_LABELS, isDockType } from "@/lib/dock-type";
 
 async function createDock(formData: FormData) {
   "use server";
@@ -14,16 +14,16 @@ async function createDock(formData: FormData) {
 
   const name = String(formData.get("name") ?? "").trim();
   const location = String(formData.get("location") ?? "").trim();
-  const equipmentType = formData.get("equipmentType");
+  const dockType = formData.get("dockType");
   const capacityRaw = String(formData.get("capacity") ?? "").trim();
   const capacity = Number.isInteger(Number(capacityRaw)) && Number(capacityRaw) >= 1 ? Number(capacityRaw) : 1;
   const warehouseIdRaw = String(formData.get("warehouseId") ?? "").trim();
   const warehouseId = warehouseIdRaw && canAccessWarehouse(staff, warehouseIdRaw) ? warehouseIdRaw : staff.warehouseId!;
 
-  if (!name || !location || !isDockEquipmentType(equipmentType)) return;
+  if (!name || !location || !isDockType(dockType)) return;
 
   await prisma.dock.create({
-    data: { name, location, equipmentType, capacity, warehouseId },
+    data: { name, location, dockType, capacity, warehouseId },
   });
 
   revalidatePath("/staff/docks");
@@ -87,16 +87,16 @@ export default async function StaffDocksPage() {
             />
           </div>
           <div className="flex flex-col gap-1">
-            <label htmlFor="equipmentType" className="text-sm font-medium text-zinc-700 dark:text-zinc-300">
+            <label htmlFor="dockType" className="text-sm font-medium text-zinc-700 dark:text-zinc-300">
               Dock Type
             </label>
             <select
-              id="equipmentType"
-              name="equipmentType"
+              id="dockType"
+              name="dockType"
               required
               className="h-10 rounded-lg border border-black/[.08] bg-white px-3 text-sm text-black dark:border-white/[.145] dark:bg-black dark:text-zinc-50"
             >
-              {Object.entries(DOCK_EQUIPMENT_TYPE_LABELS).map(([value, label]) => (
+              {Object.entries(DOCK_TYPE_LABELS).map(([value, label]) => (
                 <option key={value} value={value}>
                   {label}
                 </option>
@@ -168,7 +168,7 @@ export default async function StaffDocksPage() {
                     </Link>
                     <span className="text-xs text-zinc-500 dark:text-zinc-400">
                       {accessibleWarehouses.length > 1 && `${dock.warehouse.name} · `}
-                      {dock.location} · {DOCK_EQUIPMENT_TYPE_LABELS[dock.equipmentType]} · capacity {dock.capacity} · {dock._count.bookings} booking
+                      {dock.location} · {DOCK_TYPE_LABELS[dock.dockType]} · capacity {dock.capacity} · {dock._count.bookings} booking
                       {dock._count.bookings === 1 ? "" : "s"}
                       {dwell.averageDwellMinutes !== null && ` · avg dwell ${Math.round(dwell.averageDwellMinutes)} min`}
                     </span>

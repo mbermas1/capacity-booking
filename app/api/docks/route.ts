@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
-import { isDockEquipmentType } from "@/lib/dock-equipment-type";
-import { Prisma, type DockEquipmentType } from "@/app/generated/prisma/client";
+import { isDockType, DOCK_TYPE_VALUES } from "@/lib/dock-type";
+import { Prisma, type DockType } from "@/app/generated/prisma/client";
 
 function isNonEmptyString(value: unknown): value is string {
   return typeof value === "string" && value.trim().length > 0;
@@ -27,7 +27,7 @@ export async function GET(request: NextRequest) {
 type CreateDockBody = {
   name?: unknown;
   location?: unknown;
-  equipmentType?: unknown;
+  dockType?: unknown;
   warehouseId?: unknown;
   capacity?: unknown;
   minLeadTimeMinutes?: unknown;
@@ -59,7 +59,7 @@ export async function POST(request: NextRequest) {
 
   if (!isNonEmptyString(body.name)) errors.push("name is required");
   if (!isNonEmptyString(body.location)) errors.push("location is required");
-  if (!isDockEquipmentType(body.equipmentType)) errors.push("equipmentType must be one of STANDARD, GROUND_LEVEL");
+  if (!isDockType(body.dockType)) errors.push(`dockType must be one of ${DOCK_TYPE_VALUES.join(", ")}`);
   if (!isNonEmptyString(body.warehouseId)) errors.push("warehouseId is required");
   if (body.capacity !== undefined && !isPositiveInteger(body.capacity)) {
     errors.push("capacity must be a positive integer if provided");
@@ -86,7 +86,7 @@ export async function POST(request: NextRequest) {
       data: {
         name: (body.name as string).trim(),
         location: (body.location as string).trim(),
-        equipmentType: body.equipmentType as DockEquipmentType,
+        dockType: body.dockType as DockType,
         warehouseId: body.warehouseId as string,
         ...(body.capacity !== undefined ? { capacity: body.capacity as number } : {}),
         ...(body.minLeadTimeMinutes !== undefined ? { minLeadTimeMinutes: body.minLeadTimeMinutes as number } : {}),
