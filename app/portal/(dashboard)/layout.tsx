@@ -31,7 +31,7 @@ export default async function PortalDashboardLayout({ children }: { children: Re
   return (
     <div className="flex min-h-full flex-1 bg-zinc-50 font-sans dark:bg-black">
       <aside className="sticky top-0 flex h-screen w-64 shrink-0 flex-col border-r border-black/[.08] bg-white dark:border-white/[.145] dark:bg-[#0a0a0a]">
-        <div className="flex flex-col gap-3 px-5 py-5">
+        <div className="flex flex-col items-start gap-3 px-5 py-5">
           <Image src="/logo.png" alt="CapacityBooking" width={159} height={40} className="h-8 w-auto" priority />
           <span className="text-sm font-semibold text-black dark:text-zinc-50">{portalTitle}</span>
         </div>

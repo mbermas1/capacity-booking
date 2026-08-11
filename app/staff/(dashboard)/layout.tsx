@@ -94,7 +94,7 @@ export default async function StaffDashboardLayout({ children }: { children: Rea
   return (
     <div className="flex min-h-full flex-1 bg-zinc-50 font-sans dark:bg-black">
       <SidebarShell>
-        <div className="sidebar-header flex flex-col gap-3">
+        <div className="sidebar-header flex flex-col items-start gap-3">
           <Image src="/logo.png" alt="CapacityBooking" width={159} height={40} className="logo-full h-8 w-auto" priority />
           <Image src="/logo-mark.png" alt="CapacityBooking" width={32} height={32} className="logo-mark h-8 w-8" priority />
           <div className="sidebar-label flex flex-col">

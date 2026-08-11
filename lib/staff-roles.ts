@@ -108,7 +108,7 @@ export function landingPathForRole(role: StaffRole): string {
     case "SUPER_USER":
       return "/staff/accounts";
     case "WAREHOUSE_MANAGER":
-      return "/staff";
+      return "/staff/setup";
     case "DOCK_MANAGER":
       return "/staff/docks";
     case "DOCK_STAFF":

@@ -166,10 +166,12 @@ export default async function StaffCarriersPage() {
         </Link>
       )}
       {canManage && (
-      <section>
-        <h1 className="mb-4 text-xl font-semibold text-black dark:text-zinc-50">
-          Create or Reset a Carrier Account
-        </h1>
+      <details className="group rounded-2xl border border-black/[.08] bg-white dark:border-white/[.145] dark:bg-[#0a0a0a]">
+        <summary className="flex cursor-pointer list-none items-center justify-between px-5 py-4">
+          <span className="text-sm font-semibold text-black dark:text-zinc-50">Create or Reset a Carrier Account</span>
+          <span className="text-xs text-zinc-400 transition-transform group-open:rotate-180">▾</span>
+        </summary>
+        <div className="px-5 pb-5">
         <form
           action={createCarrierAccount}
           className="flex flex-col gap-4 rounded-2xl border border-black/[.08] bg-white p-5 dark:border-white/[.145] dark:bg-[#0a0a0a] sm:flex-row sm:flex-wrap sm:items-end"
@@ -271,7 +273,8 @@ export default async function StaffCarriersPage() {
           password instead of creating a second account. Once a contact has a working login, they can invite
           teammates themselves from the portal&rsquo;s Team page.
         </p>
-      </section>
+        </div>
+      </details>
       )}
 
       <section>

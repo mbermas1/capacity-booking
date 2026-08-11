@@ -24,7 +24,7 @@ export async function computeSetupProgress(
   warehouseId: string,
   accountId: string,
 ): Promise<{ steps: SetupStep[]; completed: number; total: number }> {
-  const [warehouse, account] = await Promise.all([
+  const [warehouse, account, warehouseStaffCount] = await Promise.all([
     prisma.warehouse.findUnique({
       where: { id: warehouseId },
       include: {
@@ -38,8 +38,13 @@ export async function computeSetupProgress(
       include: {
         tags: { take: 1 },
         carriers: { take: 1 },
-        _count: { select: { staff: true } },
       },
+    }),
+    // scoped to staff who actually work this warehouse (home or granted access), not the whole
+    // account — an account with several independently-managed warehouses shouldn't count one
+    // warehouse's manager as a "team member" of another
+    prisma.staff.count({
+      where: { OR: [{ warehouseId }, { warehouseAccess: { some: { warehouseId } } }] },
     }),
   ]);
 
@@ -51,7 +56,7 @@ export async function computeSetupProgress(
   const hasCapacity = (warehouse?.laborShifts.length ?? 0) > 0 || warehouse?.yardCapacity != null;
   const hasDetentionRate = warehouse?.detentionRatePerHour != null;
   const hasCarriers = (account?.carriers.length ?? 0) > 0;
-  const hasTeam = (account?._count.staff ?? 0) > 1;
+  const hasTeam = warehouseStaffCount > 1;
 
   const steps: SetupStep[] = [
     {
