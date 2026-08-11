@@ -130,7 +130,7 @@ export async function submitPublicBookingRequest(
 export async function verifyBookingRequestEmail(token: string): Promise<VerifyBookingRequestResult> {
   const bookingRequest = await prisma.bookingRequest.findUnique({
     where: { verificationToken: token },
-    include: { dock: true, warehouse: { select: { publicBookingSlug: true } } },
+    include: { dock: true, warehouse: { select: { publicBookingSlug: true, accountId: true } } },
   });
   if (!bookingRequest) {
     return { outcome: "not_found" };
@@ -163,7 +163,7 @@ export async function verifyBookingRequestEmail(token: string): Promise<VerifyBo
 
   if (!bookingRequest.dock.requiresManualReview) {
     try {
-      const carrier = await findOrCreateCarrierByName(prisma, bookingRequest.companyName, {
+      const carrier = await findOrCreateCarrierByName(prisma, bookingRequest.warehouse.accountId, bookingRequest.companyName, {
         email: bookingRequest.contactEmail,
       });
 

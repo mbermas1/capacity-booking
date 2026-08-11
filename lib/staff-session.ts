@@ -22,10 +22,30 @@ export async function getStaffSession() {
 export async function getStaffMember() {
   const session = await getStaffSession();
   if (!session) return null;
-  return prisma.staff.findUnique({
+  const staff = await prisma.staff.findUnique({
     where: { id: session.staffId },
     include: { warehouse: true, warehouseAccess: { include: { warehouse: true } } },
   });
+  if (!staff) return null;
+
+  // ANALYST scope is "every warehouse in my account", not hand-granted — synthesize the
+  // same warehouseAccess shape WAREHOUSE_MANAGER/DOCK_MANAGER get from real StaffWarehouse rows.
+  if (staff.role === "ANALYST" && staff.accountId) {
+    const accountWarehouses = await prisma.warehouse.findMany({
+      where: { accountId: staff.accountId, id: { not: staff.warehouseId ?? undefined } },
+    });
+    return {
+      ...staff,
+      warehouseAccess: accountWarehouses.map((warehouse) => ({
+        staffId: staff.id,
+        warehouseId: warehouse.id,
+        createdAt: staff.createdAt,
+        warehouse,
+      })),
+    };
+  }
+
+  return staff;
 }
 
 export async function requireStaffSession() {

@@ -273,9 +273,9 @@ export type SiteRollupRow = {
 };
 
 /**
- * Admin/Analyst call this unfiltered (every warehouse); Facility Manager
- * passes their assigned warehouseIds so the rollup only compares the sites
- * they can actually see.
+ * SUPER_USER calls this unfiltered (every warehouse, every account); every other role
+ * passes their getWarehouseScope() result so the rollup only compares sites within their
+ * own Account that they can actually see.
  */
 export async function computeMultiSiteRollup(
   rangeStart: Date,
