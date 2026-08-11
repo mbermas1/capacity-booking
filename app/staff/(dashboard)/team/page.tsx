@@ -14,12 +14,21 @@ const ROLE_LABELS: Record<StaffRole, string> = {
   ANALYST: "Analyst (read-only)",
 };
 
-// Roles assignable from this page — WAREHOUSE_MANAGER/SUPER_USER are assigned only
-// by a SUPER_USER from the Accounts page.
+// Roles this page can edit/remove once created — a Warehouse Manager row always stays
+// read-only here (removal is Super-User-only, on the Accounts page), even one this page
+// just created via CREATABLE_ROLES below.
 const ASSIGNABLE_ROLES: StaffRole[] = ["DOCK_MANAGER", "DOCK_STAFF", "ANALYST"];
+
+// Roles the create form's dropdown offers. A Warehouse Manager can add a peer Warehouse
+// Manager for their own account here, but can't remove one afterward — see above.
+const CREATABLE_ROLES: StaffRole[] = ["WAREHOUSE_MANAGER", ...ASSIGNABLE_ROLES];
 
 function isAssignableRole(value: string): value is StaffRole {
   return (ASSIGNABLE_ROLES as string[]).includes(value);
+}
+
+function isCreatableRole(value: string): value is StaffRole {
+  return (CREATABLE_ROLES as string[]).includes(value);
 }
 
 async function createStaff(formData: FormData) {
@@ -32,7 +41,7 @@ async function createStaff(formData: FormData) {
   const email = String(formData.get("email") ?? "").trim();
   const password = String(formData.get("password") ?? "");
   const roleRaw = String(formData.get("role") ?? "");
-  const role = isAssignableRole(roleRaw) ? roleRaw : "DOCK_STAFF";
+  const role = isCreatableRole(roleRaw) ? roleRaw : "DOCK_STAFF";
   const warehouseId = String(formData.get("warehouseId") ?? "").trim();
   const additionalWarehouseIds = formData
     .getAll("additionalWarehouseIds")
@@ -50,7 +59,7 @@ async function createStaff(formData: FormData) {
     const created = await prisma.staff.create({
       data: { name, email, passwordHash: hashPassword(password), role, warehouseId, accountId: staff.accountId },
     });
-    if (role === "DOCK_MANAGER" && additionalWarehouseIds.length > 0) {
+    if ((role === "DOCK_MANAGER" || role === "WAREHOUSE_MANAGER") && additionalWarehouseIds.length > 0) {
       await prisma.staffWarehouse.createMany({
         data: additionalWarehouseIds.map((id) => ({ staffId: created.id, warehouseId: id })),
       });
@@ -212,7 +221,7 @@ export default async function StaffTeamPage({
               defaultValue="DOCK_STAFF"
               className="h-10 rounded-lg border border-black/[.08] bg-white px-3 text-sm text-black dark:border-white/[.145] dark:bg-black dark:text-zinc-50"
             >
-              {ASSIGNABLE_ROLES.map((r) => (
+              {CREATABLE_ROLES.map((r) => (
                 <option key={r} value={r}>
                   {ROLE_LABELS[r]}
                 </option>
@@ -252,7 +261,7 @@ export default async function StaffTeamPage({
                 </option>
               ))}
             </select>
-            <span className="text-xs text-zinc-500 dark:text-zinc-500">Dock Manager role only</span>
+            <span className="text-xs text-zinc-500 dark:text-zinc-500">Warehouse Manager / Dock Manager roles only</span>
           </div>
           <button
             type="submit"
@@ -301,7 +310,7 @@ export default async function StaffTeamPage({
                   </div>
                   {!editable && (
                     <p className="text-xs text-zinc-500 dark:text-zinc-500">
-                      Warehouse Managers are assigned by a Super User from the Accounts page.
+                      Warehouse Managers can only be reassigned or removed by a Super User, from the Accounts page.
                     </p>
                   )}
                   {editable && (
