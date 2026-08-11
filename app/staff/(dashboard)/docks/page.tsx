@@ -88,7 +88,7 @@ export default async function StaffDocksPage() {
           </div>
           <div className="flex flex-col gap-1">
             <label htmlFor="equipmentType" className="text-sm font-medium text-zinc-700 dark:text-zinc-300">
-              Equipment Type
+              Dock Type
             </label>
             <select
               id="equipmentType"
