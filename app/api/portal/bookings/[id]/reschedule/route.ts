@@ -7,6 +7,8 @@ import {
   UnacceptedCommodityError,
   MinimumDurationError,
   LeadTimeError,
+  LaborCapacityError,
+  YardCapacityError,
   rescheduleBooking,
   notifyBookingRescheduled,
 } from "@/lib/bookings";
@@ -97,7 +99,9 @@ export async function PATCH(request: NextRequest, { params }: { params: Promise<
       error instanceof MissingCarrierTagError ||
       error instanceof UnacceptedCommodityError ||
       error instanceof MinimumDurationError ||
-      error instanceof LeadTimeError
+      error instanceof LeadTimeError ||
+      error instanceof LaborCapacityError ||
+      error instanceof YardCapacityError
     ) {
       return NextResponse.json({ error: error.message }, { status: 409 });
     }

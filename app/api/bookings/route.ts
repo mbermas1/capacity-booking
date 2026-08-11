@@ -6,6 +6,8 @@ import {
   MissingCarrierTagError,
   UnacceptedCommodityError,
   MinimumDurationError,
+  LaborCapacityError,
+  YardCapacityError,
   createBooking,
   notifyBookingConfirmed,
   detectNoShowMany,
@@ -187,7 +189,9 @@ export async function POST(request: NextRequest) {
       error instanceof DockClosedError ||
       error instanceof MissingCarrierTagError ||
       error instanceof UnacceptedCommodityError ||
-      error instanceof MinimumDurationError
+      error instanceof MinimumDurationError ||
+      error instanceof LaborCapacityError ||
+      error instanceof YardCapacityError
     ) {
       return NextResponse.json({ error: error.message }, { status: 409 });
     }

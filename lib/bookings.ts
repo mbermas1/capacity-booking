@@ -5,6 +5,7 @@ import {
   findMissingCarrierTags,
   findUnacceptedCommodities,
   requiredMinDurationMinutes,
+  activeLaborHeadcount,
 } from "@/lib/booking-constraints";
 import {
   sendBookingConfirmationEmail,
@@ -80,6 +81,20 @@ export class LeadTimeError extends Error {
   constructor(public requiredMinutes: number) {
     super(`Booking must be made at least ${requiredMinutes} minutes before the requested start time`);
     this.name = "LeadTimeError";
+  }
+}
+
+export class LaborCapacityError extends Error {
+  constructor(public availableHeadcount: number) {
+    super(`No scheduled labor available for this window (${availableHeadcount} worker${availableHeadcount === 1 ? "" : "s"} scheduled)`);
+    this.name = "LaborCapacityError";
+  }
+}
+
+export class YardCapacityError extends Error {
+  constructor(public trailerSlots: number) {
+    super(`Yard is at capacity for this window (${trailerSlots} trailer slot${trailerSlots === 1 ? "" : "s"} available)`);
+    this.name = "YardCapacityError";
   }
 }
 
@@ -175,6 +190,30 @@ async function validateBookingSlot(tx: Prisma.TransactionClient, params: Validat
 
   if (overlappingCount >= capacityLimit) {
     throw new BookingOverlapError();
+  }
+
+  const [yardCapacity, laborShifts] = await Promise.all([
+    tx.yardCapacity.findUnique({ where: { warehouseId: dock.warehouseId } }),
+    tx.laborShift.findMany({ where: { warehouseId: dock.warehouseId } }),
+  ]);
+  const laborHeadcount = activeLaborHeadcount(laborShifts, startTime);
+
+  if (yardCapacity || laborHeadcount !== null) {
+    const warehouseOverlap = await tx.booking.count({
+      where: {
+        dock: { warehouseId: dock.warehouseId },
+        ...(excludeBookingId ? { id: { not: excludeBookingId } } : {}),
+        startTime: { lt: endTime },
+        endTime: { gt: startTime },
+      },
+    });
+
+    if (yardCapacity && warehouseOverlap >= yardCapacity.trailerSlots) {
+      throw new YardCapacityError(yardCapacity.trailerSlots);
+    }
+    if (laborHeadcount !== null && warehouseOverlap >= laborHeadcount) {
+      throw new LaborCapacityError(laborHeadcount);
+    }
   }
 
   return { dock, declaredTags };

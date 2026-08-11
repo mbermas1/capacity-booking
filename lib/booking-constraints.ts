@@ -15,11 +15,11 @@ type DockTagWithTag = {
   tag: { id: string; category: string; name: string };
 };
 
-function minutesOfDay(date: Date): number {
+export function minutesOfDay(date: Date): number {
   return date.getUTCHours() * 60 + date.getUTCMinutes();
 }
 
-function parseHHMM(value: string): number {
+export function parseHHMM(value: string): number {
   const [hours, minutes] = value.split(":").map(Number);
   return hours * 60 + minutes;
 }
@@ -100,4 +100,20 @@ export function checkLeadTime(minLeadTimeMinutes: number | null, startTime: Date
     return `This dock requires at least ${minLeadTimeMinutes} minutes of advance notice`;
   }
   return null;
+}
+
+export type LaborShiftLike = { dayOfWeek: number; startTime: string; endTime: string; headcount: number };
+
+/**
+ * Total headcount from shifts covering this instant, or null if no shift is
+ * configured for this day/time at all (unrestricted) — same "no rule =
+ * unrestricted" convention as checkOperatingHours, evaluated at the
+ * booking's start instant.
+ */
+export function activeLaborHeadcount(shifts: LaborShiftLike[], at: Date): number | null {
+  const atMinutes = minutesOfDay(at);
+  const covering = shifts.filter(
+    (s) => s.dayOfWeek === at.getUTCDay() && atMinutes >= parseHHMM(s.startTime) && atMinutes < parseHHMM(s.endTime),
+  );
+  return covering.length === 0 ? null : covering.reduce((sum, s) => sum + s.headcount, 0);
 }

@@ -55,6 +55,11 @@ export default async function StaffDashboardLayout({ children }: { children: Rea
                 Docks
               </Link>
             )}
+            {staff && canManageCapacityRules(staff.role) && (
+              <Link href="/staff/capacity" className="hover:text-black dark:hover:text-zinc-50">
+                Capacity
+              </Link>
+            )}
             {staff && canOperateSchedule(staff.role) && (
               <Link href="/staff/schedule" className="hover:text-black dark:hover:text-zinc-50">
                 Schedule

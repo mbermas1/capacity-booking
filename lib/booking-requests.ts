@@ -10,6 +10,8 @@ import {
   UnacceptedCommodityError,
   MinimumDurationError,
   BookingOverlapError,
+  LaborCapacityError,
+  YardCapacityError,
 } from "@/lib/bookings";
 import type { LoadType } from "@/app/generated/prisma/client";
 
@@ -47,7 +49,9 @@ function describeCreateBookingError(error: unknown): string {
     error instanceof MissingCarrierTagError ||
     error instanceof UnacceptedCommodityError ||
     error instanceof MinimumDurationError ||
-    error instanceof BookingOverlapError
+    error instanceof BookingOverlapError ||
+    error instanceof LaborCapacityError ||
+    error instanceof YardCapacityError
   ) {
     return error.message;
   }

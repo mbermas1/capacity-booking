@@ -9,6 +9,8 @@ import {
   UnacceptedCommodityError,
   MinimumDurationError,
   LeadTimeError,
+  LaborCapacityError,
+  YardCapacityError,
   rescheduleBooking,
   notifyBookingRescheduled,
 } from "@/lib/bookings";
@@ -75,6 +77,10 @@ async function submitReschedule(bookingId: string, formData: FormData) {
       params.set("error", "duration");
     } else if (error instanceof LeadTimeError) {
       params.set("error", "lead-time");
+    } else if (error instanceof LaborCapacityError) {
+      params.set("error", "labor");
+    } else if (error instanceof YardCapacityError) {
+      params.set("error", "yard");
     } else if (error instanceof BookingNotFoundError) {
       notFound();
     } else {
@@ -190,6 +196,16 @@ export default async function RescheduleBookingPage({
         <p className="rounded-lg bg-red-100 px-3 py-2 text-sm text-red-800 dark:bg-red-950 dark:text-red-300">
           This reschedule must be made further in advance. Check the dock&rsquo;s lead time requirement and try
           again.
+        </p>
+      )}
+      {error === "labor" && (
+        <p className="rounded-lg bg-red-100 px-3 py-2 text-sm text-red-800 dark:bg-red-950 dark:text-red-300">
+          No scheduled labor is available for this window. Pick a different time.
+        </p>
+      )}
+      {error === "yard" && (
+        <p className="rounded-lg bg-red-100 px-3 py-2 text-sm text-red-800 dark:bg-red-950 dark:text-red-300">
+          The yard is at capacity for this window. Pick a different time.
         </p>
       )}
     </div>

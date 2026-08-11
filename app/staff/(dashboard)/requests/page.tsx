@@ -11,6 +11,8 @@ import {
   MissingCarrierTagError,
   UnacceptedCommodityError,
   MinimumDurationError,
+  LaborCapacityError,
+  YardCapacityError,
   createBooking,
 } from "@/lib/bookings";
 
@@ -72,7 +74,9 @@ async function approveRequest(requestId: string) {
       error instanceof DockClosedError ||
       error instanceof MissingCarrierTagError ||
       error instanceof UnacceptedCommodityError ||
-      error instanceof MinimumDurationError
+      error instanceof MinimumDurationError ||
+      error instanceof LaborCapacityError ||
+      error instanceof YardCapacityError
     ) {
       reason = error.message;
     } else {
