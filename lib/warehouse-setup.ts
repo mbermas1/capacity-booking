@@ -63,7 +63,7 @@ export async function computeSetupProgress(
       key: "docks",
       label: "Add a Dock",
       description: "Every booking needs a dock — this is the one required step before the warehouse can accept any bookings at all.",
-      whatYoullDo: ["Set a name, location, and equipment type", "Set how many simultaneous bookings it can hold", "Optionally set lead time, buffer time, or high-priority slot reservations"],
+      whatYoullDo: ["Set a name, location, and dock type", "Set how many simultaneous bookings it can hold", "Optionally set lead time, buffer time, or high-priority slot reservations"],
       required: true,
       complete: hasDocks,
       href: "/staff/docks",
