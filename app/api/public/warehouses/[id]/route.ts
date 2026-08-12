@@ -10,6 +10,10 @@ export async function GET(request: NextRequest, { params }: { params: Promise<{ 
       id: true,
       name: true,
       location: true,
+      publicPortalEnabled: true,
+      carrierInstructions: true,
+      amenities: true,
+      ppeRequirements: true,
       docks: {
         select: { id: true, name: true, location: true, dockType: true },
         orderBy: { name: "asc" },

@@ -95,7 +95,7 @@ export function canCreateAccount(role: StaffRole): boolean {
 }
 
 export function canCreateWarehouse(role: StaffRole): boolean {
-  return role === "SUPER_USER";
+  return role === "SUPER_USER" || role === "WAREHOUSE_MANAGER";
 }
 
 /** Dock/Gate staff have no reporting or analytics access per their role definition. */

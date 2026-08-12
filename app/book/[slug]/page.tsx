@@ -4,6 +4,7 @@ import { prisma } from "@/lib/prisma";
 import { getPublicDockAvailability } from "@/lib/availability";
 import { submitPublicBookingRequest } from "@/lib/booking-requests";
 import { LoadType } from "@/app/generated/prisma/client";
+import { AMENITY_LABELS, PPE_LABELS, parseChecklist } from "@/lib/warehouse-amenities";
 
 function parseUtc(datetimeLocalValue: string): Date | null {
   if (!datetimeLocalValue) return null;
@@ -82,12 +83,34 @@ export default async function PublicBookingPage({
       id: true,
       name: true,
       location: true,
+      publicPortalEnabled: true,
+      carrierInstructions: true,
+      amenities: true,
+      ppeRequirements: true,
       docks: { select: { id: true, name: true, location: true, dockType: true }, orderBy: { name: "asc" } },
     },
   });
 
   if (!warehouse) notFound();
 
+  if (!warehouse.publicPortalEnabled) {
+    return (
+      <div className="flex flex-1 flex-col bg-zinc-50 font-sans dark:bg-black">
+        <main className="mx-auto w-full max-w-4xl flex-1 px-6 py-10 sm:px-10">
+          <section className="mb-8">
+            <h1 className="text-xl font-semibold text-black dark:text-zinc-50">{warehouse.name}</h1>
+            <p className="text-sm text-zinc-600 dark:text-zinc-400">{warehouse.location}</p>
+          </section>
+          <p className="rounded-lg border border-black/[.08] bg-white p-5 text-sm text-zinc-600 dark:border-white/[.145] dark:bg-[#0a0a0a] dark:text-zinc-400">
+            This warehouse isn&apos;t currently accepting bookings through this link.
+          </p>
+        </main>
+      </div>
+    );
+  }
+
+  const selectedAmenities = parseChecklist(warehouse.amenities, AMENITY_LABELS);
+  const selectedPpe = parseChecklist(warehouse.ppeRequirements, PPE_LABELS);
   const startTime = startTimeParam ? parseUtc(startTimeParam) : null;
   const endTime = endTimeParam ? parseUtc(endTimeParam) : null;
 
@@ -105,6 +128,26 @@ export default async function PublicBookingPage({
             {warehouse.location} · Request a dock appointment
           </p>
         </section>
+
+        {(warehouse.carrierInstructions || selectedAmenities.length > 0 || selectedPpe.length > 0) && (
+          <section className="mb-8 flex flex-col gap-3 rounded-2xl border border-black/[.08] bg-white p-5 text-sm dark:border-white/[.145] dark:bg-[#0a0a0a]">
+            {warehouse.carrierInstructions && (
+              <p className="whitespace-pre-line text-zinc-700 dark:text-zinc-300">{warehouse.carrierInstructions}</p>
+            )}
+            {selectedAmenities.length > 0 && (
+              <p className="text-zinc-600 dark:text-zinc-400">
+                <span className="font-medium text-zinc-700 dark:text-zinc-300">Amenities: </span>
+                {selectedAmenities.map((slug) => AMENITY_LABELS[slug]).join(", ")}
+              </p>
+            )}
+            {selectedPpe.length > 0 && (
+              <p className="text-zinc-600 dark:text-zinc-400">
+                <span className="font-medium text-zinc-700 dark:text-zinc-300">PPE required: </span>
+                {selectedPpe.map((slug) => PPE_LABELS[slug]).join(", ")}
+              </p>
+            )}
+          </section>
+        )}
 
         {submitted === "approved" && (
           <p className="mb-6 rounded-lg bg-green-100 px-3 py-2 text-sm text-green-800 dark:bg-green-950 dark:text-green-300">

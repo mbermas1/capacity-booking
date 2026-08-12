@@ -28,7 +28,21 @@ model Warehouse {
   id                   String           @id @default(cuid())
   name                 String
   location             String
+  storeNumber          String?
+  phone                String?
+  contactEmail         String?
+  notes                String?
+  street               String?
+  city                 String?
+  state                String?
+  zip                  String?
+  country              String?
   publicBookingSlug    String           @unique // rotatable handle for the public /book link; regenerable on demand
+  publicPortalEnabled  Boolean          @default(true) // false = public /book/[slug] link stays reachable but shows "not accepting bookings"
+  carrierInstructions  String? // shown on the public booking page and in booking emails
+  amenities            String           @default("") // comma-separated slugs, see lib/warehouse-amenities.ts
+  ppeRequirements      String           @default("") // comma-separated slugs, see lib/warehouse-amenities.ts
+  emailSubscribers     String           @default("") // comma-separated extra recipients for booking confirmation emails
   detentionRatePerHour Float? // $/hour charged after the free-time grace period; null = cost not configured, not estimated
   detentionFreeMinutes Int? // grace period before detention accrues; null (with a rate set) = no grace period
   account              Account          @relation(fields: [accountId], references: [id])

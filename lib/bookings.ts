@@ -417,15 +417,28 @@ export async function cancelBooking(bookingId: string, actor?: BookingActor) {
 export async function notifyBookingConfirmed(bookingId: string): Promise<void> {
   const booking = await prisma.booking.findUnique({
     where: { id: bookingId },
-    include: { dock: { select: { name: true } }, carrier: { select: { email: true } } },
+    include: {
+      dock: {
+        select: {
+          name: true,
+          warehouse: { select: { carrierInstructions: true, emailSubscribers: true } },
+        },
+      },
+      carrier: { select: { email: true } },
+    },
   });
   if (!booking?.carrier.email) return;
 
-  await sendBookingConfirmationEmail(booking.carrier.email, {
+  const subscribers = booking.dock.warehouse.emailSubscribers
+    ? booking.dock.warehouse.emailSubscribers.split(",").filter(Boolean)
+    : [];
+
+  await sendBookingConfirmationEmail([booking.carrier.email, ...subscribers], {
     dockName: booking.dock.name,
     startTime: booking.startTime,
     endTime: booking.endTime,
     referenceNumber: booking.referenceNumber,
+    carrierInstructions: booking.dock.warehouse.carrierInstructions ?? undefined,
   });
 }
 

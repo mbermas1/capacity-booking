@@ -4,7 +4,7 @@
  * zero new dependencies. Never throws: a failed send doesn't lose the caller's
  * data, it just means whatever depended on the email doesn't happen yet.
  */
-async function sendEmail(to: string, subject: string, html: string): Promise<boolean> {
+async function sendEmail(to: string | string[], subject: string, html: string): Promise<boolean> {
   const apiKey = process.env.EMAILIT_API_KEY;
   const fromEmail = process.env.EMAILIT_FROM_EMAIL;
 
@@ -20,7 +20,7 @@ async function sendEmail(to: string, subject: string, html: string): Promise<boo
         Authorization: `Bearer ${apiKey}`,
         "Content-Type": "application/json",
       },
-      body: JSON.stringify({ from: fromEmail, to, subject, html }),
+      body: JSON.stringify({ from: fromEmail, to: Array.isArray(to) ? to.join(",") : to, subject, html }),
     });
 
     if (!response.ok) {
@@ -44,23 +44,29 @@ export async function sendPasswordResetEmail(to: string, resetUrl: string): Prom
 export async function sendVerificationEmail(
   to: string,
   verifyUrl: string,
-  context: { dockName: string },
+  context: { dockName: string; carrierInstructions?: string },
 ): Promise<boolean> {
+  const instructions = context.carrierInstructions
+    ? `<p>${context.carrierInstructions}</p>`
+    : "";
   return sendEmail(
     to,
     `Confirm your dock booking request — ${context.dockName}`,
-    `<p>Confirm your booking request for ${context.dockName}:</p><p><a href="${verifyUrl}">${verifyUrl}</a></p><p>This link expires in 30 minutes.</p>`,
+    `<p>Confirm your booking request for ${context.dockName}:</p><p><a href="${verifyUrl}">${verifyUrl}</a></p><p>This link expires in 30 minutes.</p>${instructions}`,
   );
 }
 
 export async function sendBookingConfirmationEmail(
-  to: string,
-  context: { dockName: string; startTime: Date; endTime: Date; referenceNumber: string },
+  to: string | string[],
+  context: { dockName: string; startTime: Date; endTime: Date; referenceNumber: string; carrierInstructions?: string },
 ): Promise<boolean> {
+  const instructions = context.carrierInstructions
+    ? `<p>${context.carrierInstructions}</p>`
+    : "";
   return sendEmail(
     to,
     `Booking confirmed — ${context.dockName}`,
-    `<p>Your dock appointment is confirmed.</p><ul><li>Dock: ${context.dockName}</li><li>Time: ${context.startTime.toISOString()}–${context.endTime.toISOString()} UTC</li><li>Reference: ${context.referenceNumber}</li></ul>`,
+    `<p>Your dock appointment is confirmed.</p><ul><li>Dock: ${context.dockName}</li><li>Time: ${context.startTime.toISOString()}–${context.endTime.toISOString()} UTC</li><li>Reference: ${context.referenceNumber}</li></ul>${instructions}`,
   );
 }
 

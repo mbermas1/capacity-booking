@@ -86,7 +86,7 @@ export async function submitPublicBookingRequest(
 
   const warehouse = await prisma.warehouse.findUnique({
     where: { id: input.warehouseId },
-    select: { publicBookingSlug: true },
+    select: { publicBookingSlug: true, carrierInstructions: true },
   });
   if (!warehouse) {
     return { outcome: "dock_not_found" };
@@ -113,7 +113,10 @@ export async function submitPublicBookingRequest(
   });
 
   const verifyUrl = `${input.verifyBaseUrl}/book/${warehouse.publicBookingSlug}/verify?token=${verificationToken}`;
-  const sent = await sendVerificationEmail(input.contactEmail, verifyUrl, { dockName: dock.name });
+  const sent = await sendVerificationEmail(input.contactEmail, verifyUrl, {
+    dockName: dock.name,
+    carrierInstructions: warehouse.carrierInstructions ?? undefined,
+  });
   if (!sent) {
     await prisma.bookingRequest.update({
       where: { id: bookingRequest.id },

@@ -49,13 +49,15 @@ export async function POST(request: NextRequest) {
   const errors: string[] = [];
   if (!isNonEmptyString(body.name)) errors.push("name is required");
   if (!isNonEmptyString(body.location)) errors.push("location is required");
-  if (!isNonEmptyString(body.accountId)) errors.push("accountId is required");
+  if (staff.role === "SUPER_USER" && !isNonEmptyString(body.accountId)) errors.push("accountId is required");
 
   if (errors.length > 0) {
     return NextResponse.json({ error: "Validation failed", details: errors }, { status: 400 });
   }
 
-  const account = await prisma.account.findUnique({ where: { id: body.accountId as string } });
+  const accountId = staff.role === "SUPER_USER" ? (body.accountId as string) : staff.accountId!;
+
+  const account = await prisma.account.findUnique({ where: { id: accountId } });
   if (!account) {
     return NextResponse.json({ error: "Account not found" }, { status: 404 });
   }
@@ -68,6 +70,10 @@ export async function POST(request: NextRequest) {
       publicBookingSlug: randomBytes(16).toString("hex"),
     },
   });
+
+  if (staff.role === "WAREHOUSE_MANAGER") {
+    await prisma.staffWarehouse.create({ data: { staffId: staff.id, warehouseId: warehouse.id } });
+  }
 
   return NextResponse.json(warehouse, { status: 201 });
 }
